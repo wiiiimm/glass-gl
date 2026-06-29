@@ -67,17 +67,6 @@
     box-shadow: 0 1px 4px rgb(0 0 0 / .4);
   }
 
-  /* glass-gl wordmark — a glass logo plaque (itself a registered WebGL-glass surface) */
-  .shape.wordmark { padding: 16px 32px; }
-  .shape.wordmark .wm {
-    font-family: ui-serif, "New York", Georgia, "Times New Roman", serif;
-    font-size: clamp(36px, 4.8vw, 58px); font-weight: 700; letter-spacing: 0;
-    line-height: 1; white-space: nowrap;
-    background: linear-gradient(180deg, #ffffff 0%, #e3ecff 60%, #c4d4ff 100%);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-    filter: drop-shadow(0 1px 1px rgb(0 0 0 / .25));
-  }
-
   /* glass icon circle — a circle is just a glass surface registered with radius = half its size */
   .shape.iconbtn {
     width: 76px; height: 76px; padding: 0; border-radius: 50%;
@@ -101,6 +90,21 @@
     width: 26px; height: 26px; color: #fff; opacity: .82;
     filter: drop-shadow(0 1px 2px rgb(0 0 0 / .45));
   }
+
+  /* slide dock — small glass controller with photo thumbnails */
+  .shape.dock {
+    display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 22px;
+    transition: opacity .2s ease;
+  }
+  .shape.dock .th {
+    width: 56px; height: 38px; padding: 0; border: 0; border-radius: 10px; cursor: pointer;
+    overflow: hidden; background: none; outline: 2px solid transparent; outline-offset: 2px;
+    transition: outline-color .18s ease, transform .18s ease;
+  }
+  .shape.dock .th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .shape.dock .th:hover { transform: translateY(-2px); }
+  .shape.dock .th.on { outline-color: #fff; }
+  .shape.dock.disabled { opacity: .4; pointer-events: none; }
 
   .tile { width: 230px; padding: 15px; }
   .tile .photo {
@@ -238,6 +242,8 @@
         <input type="range" id="s-edge" min="0" max="200" step="5"></div>
       <div class="ctrl"><div class="row"><label>Edge frost <span style="opacity:.6">(rim border)</span></label><span class="val" id="v-frost"></span></div>
         <input type="range" id="s-frost" min="0" max="100" step="2"></div>
+      <div class="ctrl"><div class="row"><label>Chromatic <span style="opacity:.6">(edge dispersion)</span></label><span class="val" id="v-disperse"></span></div>
+        <input type="range" id="s-disperse" min="0" max="100" step="2"></div>
       <div class="ctrl"><div class="row"><label>Gloss <span style="opacity:.6">(reflective top)</span></label><span class="val" id="v-gloss"></span></div>
         <input type="range" id="s-gloss" min="0" max="100" step="2"></div>
       <div class="ctrl"><div class="row"><label>Gloss size</label><span class="val" id="v-glosssize"></span></div>
@@ -263,8 +269,9 @@
         <button class="btn ghost" id="reset">Reset</button>
       </div>
       <button class="btn ghost" id="copy" style="width:100%;margin-top:8px">Copy settings</button>
-      <input type="file" id="bgFile" accept="image/*" style="display:none">
-      <button class="btn ghost" id="bgBtn" style="width:100%;margin-top:8px">Change background…</button>
+      <input type="file" id="bgFile" accept="image/*,video/*" style="display:none">
+      <button class="btn ghost" id="bgBtn" style="width:100%;margin-top:8px">Upload background (image / video)…</button>
+      <button class="btn ghost" id="bgClear" style="width:100%;margin-top:8px;display:none">Clear — resume slideshow</button>
     </aside>
 
     <div class="hint">
@@ -284,10 +291,105 @@
      to BE glass. This file is now a *consumer* of the library. */
   const canvasEl = document.getElementById("gl");
   const scene = document.getElementById("canvas");
-  const glass = createGlass({ canvas: canvasEl, background: "images/bg.jpg" });
+
+  /* ===================== background stage =====================
+     A canvas we paint every frame: photo (Ken Burns zoom/pan, cross-faded
+     slideshow) + the glass-gl wordmark baked ON the photo. We hand this canvas
+     to the engine as a LIVE background, so the glass actually refracts both the
+     moving scene AND the text — exactly the "bake content into the background"
+     rule. Upload an image/video to override; clear to resume the slideshow. */
+  const SLIDES = [
+    { src:"images/bg.jpg",        label:"Florals" },
+    { src:"images/bg-fjord.jpg",  label:"Fjord"   },
+    { src:"images/bg-sunset.jpg", label:"Sunset"  },
+    { src:"images/bg-forest.jpg", label:"Forest"  },
+    { src:"images/bg-rail.jpg",   label:"Rail"    },
+  ];
+  const HEAD = "glass-gl";
+  const SUB  = "real-time liquid glass · it refracts the background, not the page";
+
+  const stage = document.createElement("canvas");
+  const sx = stage.getContext("2d");
+  const slideImgs = SLIDES.map(s => { const im = new Image(); im.src = s.src; return im; });
+
+  let stageW = 1, stageH = 1;
+  function sizeStage() {
+    const w = Math.min(window.innerWidth, 1600), scale = w / window.innerWidth;
+    stageW = stage.width  = Math.max(1, Math.round(window.innerWidth  * scale));
+    stageH = stage.height = Math.max(1, Math.round(window.innerHeight * scale));
+  }
+  sizeStage();
+  window.addEventListener("resize", sizeStage);
+
+  const HOLD = 9000, FADE = 1400, KB = 16000;   // ms: hold per slide, crossfade, ken-burns cycle
+  let curIdx = 0, nextIdx = 1, slideStart = performance.now();
+  let fading = false, fadeStart = 0, auto = true, userBg = null;
+
+  const srcReady = m => m instanceof HTMLVideoElement ? m.readyState >= 2 : (m && m.complete && m.naturalWidth > 0);
+  const srcW = m => m.naturalWidth  || m.videoWidth  || 0;
+  const srcH = m => m.naturalHeight || m.videoHeight || 0;
+
+  function drawSlide(m, phase, alpha) {
+    if (!srcReady(m)) return;
+    const iw = srcW(m), ih = srcH(m), ia = iw / ih, ca = stageW / stageH;
+    const z = 1.05 + 0.12 * phase;                       // slow zoom 1.05 → 1.17
+    let dw, dh;
+    if (ca > ia) { dw = stageW; dh = stageW / ia; } else { dh = stageH; dw = stageH * ia; }
+    dw *= z; dh *= z;
+    const dx = (stageW - dw) / 2 + (phase - 0.5) * 0.05 * stageW;   // gentle pan
+    const dy = (stageH - dh) / 2 + (phase - 0.5) * 0.04 * stageH;
+    sx.globalAlpha = alpha; sx.drawImage(m, dx, dy, dw, dh); sx.globalAlpha = 1;
+  }
+  function drawText() {
+    const cx = stageW / 2, cy = stageH / 2;
+    sx.textAlign = "center"; sx.textBaseline = "middle";
+    const hs = Math.round(stageW * 0.085);
+    sx.save();
+    sx.shadowColor = "rgba(0,0,0,.38)"; sx.shadowBlur = stageW * 0.013; sx.shadowOffsetY = 2;
+    sx.font = `700 ${hs}px "New York", Georgia, "Times New Roman", serif`;
+    sx.fillStyle = "#fff"; sx.fillText(HEAD, cx, cy);
+    sx.restore();
+    sx.font = `600 ${Math.round(stageW * 0.0145)}px ui-sans-serif, -apple-system, "Segoe UI", sans-serif`;
+    sx.fillStyle = "rgba(255,255,255,.92)";
+    sx.fillText(SUB, cx, cy + hs * 0.72);
+  }
+  function renderStage(now) {
+    sx.clearRect(0, 0, stageW, stageH);
+    if (userBg) {
+      drawSlide(userBg, userBg instanceof HTMLVideoElement ? 0.5 : ((now - slideStart) % KB) / KB, 1);
+    } else {
+      const phase = ((now - slideStart) % KB) / KB;
+      drawSlide(slideImgs[curIdx], phase, 1);
+      if (fading) {
+        const t = Math.min(1, (now - fadeStart) / FADE);
+        drawSlide(slideImgs[nextIdx], ((now - fadeStart) % KB) / KB, t);
+        if (t >= 1) { curIdx = nextIdx; fading = false; slideStart = now; updateDock(); }
+      } else if (auto && now - slideStart > HOLD) {
+        nextIdx = (curIdx + 1) % SLIDES.length; fading = true; fadeStart = now; updateDock();
+      }
+    }
+    drawText();
+  }
+  renderStage(performance.now());
+  (function stageLoop(){ renderStage(performance.now()); requestAnimationFrame(stageLoop); })();
+
+  const glass = createGlass({ canvas: canvasEl, background: stage });
+
+  function updateDock() {
+    const active = fading ? nextIdx : curIdx;
+    scene.querySelectorAll(".dock .th").forEach(b => b.classList.toggle("on", +b.dataset.idx === active));
+  }
+  function goToSlide(idx) {
+    if (userBg || (idx === curIdx && !fading)) return;
+    nextIdx = idx; fading = true; fadeStart = performance.now(); updateDock();
+  }
+  function setDockEnabled(on) {
+    const d = scene.querySelector(".dock");
+    if (d) d.classList.toggle("disabled", !on);
+  }
 
   /* ===================== glass params ===================== */
-  const DEFAULTS = { blur:12, lens:22, white:0, edge:100, frost:22, gloss:35, glosssize:50, border:45, radius:30, shadow:35, tint:"light" };
+  const DEFAULTS = { blur:12, lens:22, white:0, edge:100, frost:22, disperse:18, gloss:35, glosssize:50, border:45, radius:30, shadow:35, tint:"light" };
   const P = { ...DEFAULTS, tintRGB:[1,1,1] };
 
   /* ===================== draggable objects ===================== */
@@ -353,9 +455,6 @@
     TILES.forEach(t => make(tileHTML(t), "tile", t.x, t.y));
     DOCS.forEach(d => make(docHTML(d), "doc", d.x, d.y));
     make(getitHTML, "doc getit", GETIT.x, GETIT.y);
-    const wm = make('<span class="wm">glass-gl</span>', "wordmark", 0, 0);
-    wm.style.left = Math.round((innerWidth - wm.offsetWidth) / 2) + "px";   // centre on the canvas
-    wm.style.top  = Math.round((innerHeight - wm.offsetHeight) / 2) + "px";
 
     // 4 glass icon circles (circle = surface registered with radius = half its size)
     const CIRCLE = ["home", "search", "heart", "user"];
@@ -372,6 +471,15 @@
     const bar = make(BAR.map(iconSVG).join(""), "appbar", 60, 378);   // left-middle, just under the first tile
     glass.register(bar, { radius: BARH / 2 });
 
+    // slide dock — small glass controller with photo thumbnails (bottom-centre)
+    const dockHTML = SLIDES.map((s, i) =>
+      `<button class="th${i === curIdx ? " on" : ""}" data-idx="${i}" title="${s.label}" aria-label="${s.label}"><img src="${s.src}" alt="" draggable="false"></button>`).join("");
+    const dock = make(dockHTML, "dock", 0, 0);
+    glass.register(dock, { radius: 22 });
+    dock.style.left = Math.round((innerWidth - dock.offsetWidth) / 2) + "px";
+    dock.style.top  = (innerHeight - dock.offsetHeight - 24) + "px";
+    if (userBg) setDockEnabled(false);
+
     applyDOM();
     applyGloss();
     // the UI chrome is WebGL glass too — register with their own corner radii
@@ -379,8 +487,10 @@
     glass.register(document.querySelector(".hint"),  { radius: 12 });
   }
 
-  /* tab switching inside the "Get it" tile (delegated, survives rebuilds) */
+  /* delegated clicks (survive scene rebuilds): Get-it tabs + slide dock */
   scene.addEventListener("click", (e) => {
+    const th = e.target.closest(".dock .th");
+    if (th) { goToSlide(+th.dataset.idx); return; }
     const tab = e.target.closest(".getit .tab"); if (!tab) return;
     const card = tab.closest(".getit");
     card.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t === tab));
@@ -417,6 +527,7 @@
     white: { el:$("s-white"), out:$("v-white"), fmt:v=>v==0?"off":(v/100).toFixed(2) },
     edge:  { el:$("s-edge"),  out:$("v-edge"),  fmt:v=>(v/100).toFixed(2)+"×" },
     frost: { el:$("s-frost"), out:$("v-frost"), fmt:v=>v==0?"off":(v/100).toFixed(2) },
+    disperse:{ el:$("s-disperse"), out:$("v-disperse"), fmt:v=>v==0?"off":(v/100).toFixed(2) },
     gloss: { el:$("s-gloss"), out:$("v-gloss"), fmt:v=>v==0?"off":(v/100).toFixed(2) },
     glosssize:{ el:$("s-glosssize"), out:$("v-glosssize"), fmt:v=>(v/100).toFixed(2) },
     border:{ el:$("s-border"),out:$("v-border"),fmt:v=>(v/100).toFixed(2) },
@@ -518,6 +629,7 @@
       liquidness: Math.max(P.white / 100, P.tint === "dark" ? 0.35 : 0),  // dark glass needs a tint floor to show
       edgeLight:  P.edge / 100,
       edgeFrost:  P.frost / 100,
+      dispersion: P.disperse / 100,
       radius:     P.radius,
       tint:       P.tintRGB,
     });
@@ -542,6 +654,7 @@
       liquidness: f(P.white / 100),
       edgeLight:  f(P.edge / 100),
       edgeFrost:  f(P.frost / 100),
+      dispersion: f(P.disperse / 100),
       radius:     P.radius,
       tint:       P.tintRGB,
     };
@@ -553,6 +666,7 @@
       `  liquidness  ${e.liquidness}`,
       `  edgeLight   ${e.edgeLight}`,
       `  edgeFrost   ${e.edgeFrost}`,
+      `  dispersion  ${e.dispersion}`,
       `  gloss       ${f(P.gloss/100)}  size ${P.glosssize}%  angle ${Math.round(glossAngle)}°  (CSS overlay)`,
       `  radius      ${e.radius}px`,
       `  tint        ${P.tint} [${P.tintRGB.join(", ")}]`,
@@ -570,12 +684,26 @@
     document.body.removeChild(ta);
     return ok ? Promise.resolve() : Promise.reject();
   }
-  /* replace the wallpaper the glass refracts (any local image) */
+  /* upload an image OR video to override the slideshow; clear to resume it */
   $("bgBtn").onclick = () => $("bgFile").click();
   $("bgFile").addEventListener("change", (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (file) glass.setBackground(URL.createObjectURL(file));
+    const file = e.target.files && e.target.files[0]; if (!file) return;
+    const url = URL.createObjectURL(file);
+    if (file.type.startsWith("video")) {
+      const v = document.createElement("video");
+      v.src = url; v.loop = v.muted = v.playsInline = v.autoplay = true;
+      v.play().catch(() => {});
+      userBg = v;
+    } else {
+      const im = new Image(); im.src = url; userBg = im;
+    }
+    auto = false; fading = false; slideStart = performance.now();
+    setDockEnabled(false); $("bgClear").style.display = "";
   });
+  $("bgClear").onclick = () => {
+    userBg = null; auto = true; slideStart = performance.now();
+    setDockEnabled(true); updateDock(); $("bgClear").style.display = "none";
+  };
 
   $("copy").onclick = () => {
     const btn = $("copy"), label = "Copy settings";
