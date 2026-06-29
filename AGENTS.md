@@ -10,12 +10,17 @@ Guidance for AI coding agents (Claude Code, Cursor, Codex, etc.) working in this
 - **Use Conventional Commits** — `type(scope): description` (`feat`/`fix`/`chore`/`ci`/`docs`/…;
   `feat!` or a `BREAKING CHANGE:` footer for majors). Free good habit, and makes a later switch
   to semantic-release trivial.
-- **Releasing = manual version bump.** Edit the `version` in `packages/glass-gl/package.json`,
-  commit, and push to `main`. CI (`.github/workflows/publish.yml`) then publishes to npm and
-  cuts a GitHub Release — **only when that version isn't already on npm**, so ordinary pushes
-  don't republish. This is effectively a lightweight pooled release: pool commits, bump when a
-  version is worth cutting.
+- **Releasing = bump version, then run the workflow (manual, not on push).** Edit the
+  `version` in `packages/glass-gl/package.json` and commit. Then trigger the **Publish glass-gl**
+  workflow — Actions tab → *Run workflow*, or `gh workflow run "Publish glass-gl" --repo wiiiimm/glass-gl`.
+  It publishes to npm + cuts a GitHub Release, but **only when that version isn't already on npm**
+  (a stray run won't republish). It deliberately does **not** run on push, so a routine commit to
+  `main` can't surprise-publish. Effectively a lightweight pooled release: pool commits, bump +
+  release when worth it.
 - `glass-gl` is a **package**, so `npm publish` *is* the release — there is no prod deploy to gate.
+- **Engine is one file:** `packages/glass-gl/glass-gl.js` is the canonical source;
+  `playground/glass-gl.js` is a **symlink** to it. Edit the package file — never replace the
+  symlink with a copy (it exists so the demo and the published package can't drift).
 
 **Deferred (until there are users / a real cadence):** full semantic-release automation,
 commit-driven auto-versioning, changelog generation, and pooled-release triggers. Reference

@@ -62,10 +62,15 @@ cd playground && python3 -m http.server 8000
 `glass-gl` ships from `packages/glass-gl`, and the release process is kept simple while the
 project is experimental:
 
-1. Bump the `version` in `packages/glass-gl/package.json`.
-2. Commit (Conventional Commits — `feat:` / `fix:` / `chore:` …) and push to `main`.
-3. CI (`.github/workflows/publish.yml`) publishes to npm and cuts a matching GitHub Release —
-   only when that version isn't already on npm, so ordinary pushes don't republish.
+1. Bump the `version` in `packages/glass-gl/package.json` and commit (Conventional Commits —
+   `feat:` / `fix:` / `chore:` …).
+2. Run the **Publish glass-gl** workflow — GitHub → Actions → *Run workflow*, or
+   `gh workflow run "Publish glass-gl"`.
+3. CI publishes to npm and cuts a matching GitHub Release — only when that version isn't already
+   on npm. It does **not** run on push, so a routine commit can't surprise-publish.
+
+> The engine lives once: `packages/glass-gl/glass-gl.js` is canonical and `playground/glass-gl.js`
+> is a symlink to it — edit the package file.
 
 Full semantic-release automation and the `production` deploy gate are intentionally deferred;
 see `AGENTS.md` and `.claude/skills/` for that setup when it's needed.

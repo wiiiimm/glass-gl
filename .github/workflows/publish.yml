@@ -1,16 +1,16 @@
 name: Publish glass-gl
 
-# Runs on every push to main. Publishes to npm + creates a GitHub Release
-# ONLY when packages/glass-gl/package.json has a version not yet on npm.
-# (npm rejects re-publishing the same version, so unchanged versions are skipped.)
+# Manual release: trigger from the Actions tab (Run workflow) or `gh workflow run`.
+# Publishes packages/glass-gl to npm + creates a GitHub Release, but ONLY when
+# package.json has a version not yet on npm (a stray run won't republish).
+# Deliberately NOT on push, so a routine commit to main can't surprise-publish —
+# bump the version first, then run this workflow.
 #
 # One-time setup: add an npm "Automation" access token as a repo secret named
 # NPM_TOKEN  (npmjs.com → Access Tokens → Generate → Automation;
 #             then: gh secret set NPM_TOKEN  — or via GitHub repo Settings → Secrets).
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
