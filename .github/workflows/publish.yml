@@ -1,0 +1,59 @@
+name: Publish glass-gl
+
+# Runs on every push to main. Publishes to npm + creates a GitHub Release
+# ONLY when packages/glass-gl/package.json has a version not yet on npm.
+# (npm rejects re-publishing the same version, so unchanged versions are skipped.)
+#
+# One-time setup: add an npm "Automation" access token as a repo secret named
+# NPM_TOKEN  (npmjs.com → Access Tokens → Generate → Automation;
+#             then: gh secret set NPM_TOKEN  — or via GitHub repo Settings → Secrets).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write        # create tags + releases
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Read package version
+        id: pkg
+        run: echo "version=$(node -p "require('./packages/glass-gl/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Is this version already on npm?
+        id: check
+        run: |
+          if npm view "glass-gl@${{ steps.pkg.outputs.version }}" version >/dev/null 2>&1; then
+            echo "exists=true"  >> "$GITHUB_OUTPUT"
+            echo "glass-gl@${{ steps.pkg.outputs.version }} already published — skipping."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish to npm
+        if: steps.check.outputs.exists == 'false'
+        working-directory: packages/glass-gl
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ steps.pkg.outputs.version }}" \
+            --title "glass-gl v${{ steps.pkg.outputs.version }}" \
+            --notes "Automated release of glass-gl v${{ steps.pkg.outputs.version }} — commit ${{ github.sha }}." \
+            --target "${{ github.sha }}"
