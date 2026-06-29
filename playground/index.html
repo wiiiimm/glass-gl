@@ -115,6 +115,22 @@
     padding: 3px 11px; border-radius: 999px; border: 1px solid currentColor;
     opacity: .85; margin-bottom: 11px;
   }
+  /* "Get it" tabbed card */
+  .getit .tabs {
+    display: inline-flex; gap: 3px; padding: 3px; margin-bottom: 13px;
+    border-radius: 999px; background: rgb(0 0 0 / .28);
+    border: 1px solid rgb(255 255 255 / .14);
+  }
+  .getit .tab {
+    appearance: none; border: 0; cursor: pointer; color: #fff;
+    font: 800 11.5px/1 inherit; letter-spacing: .3px;
+    padding: 6px 14px; border-radius: 999px; background: transparent; opacity: .7;
+    transition: background .15s, opacity .15s;
+  }
+  .getit .tab:hover { opacity: .95; }
+  .getit .tab.on { background: rgb(255 255 255 / .92); color: #111; opacity: 1; }
+  .getit .pane[hidden] { display: none; }
+  .getit .pane p { min-height: 78px; }
 
   /* =========================================================================
      CONTROL PANEL — pinned. Stays CSS glass (backdrop-filter frosts the WebGL
@@ -275,9 +291,28 @@
   const DOCS = [
     { pill:"THE RECIPE", h:"Glass that refracts", x:440, y:90,
       p:`The card has <b>no background</b> — the shader behind it samples the photo, <b>bends</b> it through a squircle lens, blurs it, and lights the top edge.` },
-    { pill:"3 TIERS", h:"This is tier 3", x:820, y:560,
-      p:`Tier 1 = CSS <code>blur()</code> (the panel). Tier 2 = SVG displacement. Tier 3 = this WebGL lens — the richest, and what the original used.` },
+    { pill:"THE PACKAGE", h:"glass-gl", x:820, y:560,
+      p:`A tiny WebGL engine: <code>register()</code> any element and it becomes a real glass lens that refracts the background — not just a <code>backdrop-filter</code> blur. Framework-agnostic, MIT.` },
   ];
+
+  /* "Get it" tile — a tabbed card: install for humans / setup for AI agents */
+  const GETIT = { x:440, y:470 };
+  const getitHTML = `
+    <div class="tabs" role="tablist">
+      <button class="tab on" data-tab="human" role="tab">For humans</button>
+      <button class="tab"    data-tab="ai"    role="tab">For AI</button>
+    </div>
+    <div class="pane" data-pane="human">
+      <p><code>npm i glass-gl</code><br>
+      Then <code>import { createGlass }</code>, point it at a background, and
+      <code>register()</code> your elements. Source &amp; docs:
+      <b>github.com/wiiiimm/glass-gl</b>.</p>
+    </div>
+    <div class="pane" data-pane="ai" hidden>
+      <p>Point Claude Code / Cursor at <b>github.com/wiiiimm/glass-gl</b> — the
+      repo ships an <code>AGENTS.md</code> with the API, limits, and the one
+      rule, so your agent wires up <code>glass-gl</code> correctly.</p>
+    </div>`;
 
   let zTop = 100;   // dragged blocks jump above the panel/footer (z 50)
   function make(html, cls, x, y) {
@@ -309,6 +344,7 @@
     glass.clear();                 // drop stale element refs before re-registering
     TILES.forEach(t => make(tileHTML(t), "tile", t.x, t.y));
     DOCS.forEach(d => make(docHTML(d), "doc", d.x, d.y));
+    make(getitHTML, "doc getit", GETIT.x, GETIT.y);
     const wm = make('<span class="wm">glass-gl</span>', "wordmark", 0, 0);
     wm.style.left = Math.round((innerWidth - wm.offsetWidth) / 2) + "px";   // centre on the canvas
     wm.style.top  = Math.round((innerHeight - wm.offsetHeight) / 2) + "px";
@@ -334,6 +370,14 @@
     glass.register(document.querySelector(".panel"), { radius: 22 });
     glass.register(document.querySelector(".hint"),  { radius: 12 });
   }
+
+  /* tab switching inside the "Get it" tile (delegated, survives rebuilds) */
+  scene.addEventListener("click", (e) => {
+    const tab = e.target.closest(".getit .tab"); if (!tab) return;
+    const card = tab.closest(".getit");
+    card.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t === tab));
+    card.querySelectorAll(".pane").forEach(p => p.hidden = p.dataset.pane !== tab.dataset.tab);
+  });
 
   /* ===================== dragging ===================== */
   let drag = null;
