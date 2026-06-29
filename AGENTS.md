@@ -21,8 +21,9 @@ The repo ships:
 
 - **It's JS + WebGL, not CSS.** The glass is a fragment shader on a `<canvas>` behind the page.
   You can't get this refraction with CSS alone — CSS can only blur (`backdrop-filter`).
-- **It bends a *background*, not the *page*.** The shader only samples the background texture you
-  give it (image / canvas / video / gradient). It **cannot** refract arbitrary live DOM behind it
+- **It bends a *background*, not the *page*.** `setBackground` takes a URL string, `<img>`,
+  `<canvas>`, or `<video>` (for a gradient, paint it into a canvas and pass that). It **cannot**
+  refract arbitrary live DOM behind it
   (e.g. a `<p>`). Put content *on* the glass; give the glass a media background to refract. To
   refract text/graphics, **bake them into the background canvas** (that's what the playground does
   with the `glass-gl` wordmark). A `<canvas>`/`<video>` background is **live** — re-uploaded every
@@ -53,9 +54,6 @@ include `dispersion` (chromatic aberration) alongside `refraction`/`blur`/`edgeF
 - `.claude/skills/` — installed release/commit skills (reference only — see Release workflow).
 - `docs/` — screenshots used in the README.
 - `AGENTS.md` / `CLAUDE.md` (symlink), `README.md`, `LICENSE`.
-- `plugins/glass-ui/skills/glass-ui/` — **legacy/exploratory.** An earlier "glassmorphism across
-  CSS/SCSS/Tailwind/shadcn/SVG/WebGL" skill from before the project narrowed to the WebGL engine.
-  Not the current focus; left in place. Don't treat it as the source of truth.
 
 ## Release & commit workflow
 

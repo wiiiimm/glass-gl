@@ -190,7 +190,10 @@ export function createGlass({ canvas, background, params } = {}) {
       uploadTexture(src, src.width, src.height);
     } else if (src instanceof HTMLVideoElement) {
       liveSource = src;                // playing video → refresh each frame
-      const up = () => uploadTexture(src, src.videoWidth, src.videoHeight);
+      const up = () => {              // ignore if superseded/destroyed before it fires
+        if (!alive || liveSource !== src) return;
+        try { uploadTexture(src, src.videoWidth, src.videoHeight); } catch (e) {}
+      };
       if (src.readyState >= 2) up();
       else src.addEventListener("loadeddata", up, { once: true });
     }
@@ -214,13 +217,15 @@ export function createGlass({ canvas, background, params } = {}) {
   function frame() {
     if (!alive) return;
 
-    // live background (canvas / video): pull a fresh frame into the texture
+    // live background (canvas / video): pull a fresh frame into the texture.
+    // A failed upload (e.g. a tainted/cross-origin source) disables the live
+    // refresh instead of throwing every frame — the last good frame stays.
     if (liveSource) {
       const isVid = (typeof HTMLVideoElement !== "undefined") && liveSource instanceof HTMLVideoElement;
       if (!isVid || liveSource.readyState >= 2) {
         const lw = liveSource.videoWidth || liveSource.width;
         const lh = liveSource.videoHeight || liveSource.height;
-        if (lw && lh) { try { uploadTexture(liveSource, lw, lh); } catch (e) {} }
+        if (lw && lh) { try { uploadTexture(liveSource, lw, lh); } catch (e) { liveSource = null; } }
       }
     }
 

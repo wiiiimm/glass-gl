@@ -402,7 +402,9 @@
   }
   function setDockEnabled(on) {
     const d = scene.querySelector(".dock");
-    if (d) d.classList.toggle("disabled", !on);
+    if (!d) return;
+    d.classList.toggle("disabled", !on);
+    d.querySelectorAll(".th").forEach(b => b.disabled = !on);   // also drop keyboard focus/activation
   }
 
   /* ===================== glass params ===================== */
@@ -702,23 +704,32 @@
     return ok ? Promise.resolve() : Promise.reject();
   }
   /* upload an image OR video to override the slideshow; clear to resume it */
+  let userBgURL = null;                       // object URL we own → must revoke
+  function freeUserBg() {
+    if (userBg instanceof HTMLVideoElement) { userBg.pause(); userBg.removeAttribute("src"); userBg.load(); }
+    if (userBgURL) { URL.revokeObjectURL(userBgURL); userBgURL = null; }
+    userBg = null;
+  }
   $("bgBtn").onclick = () => $("bgFile").click();
   $("bgFile").addEventListener("change", (e) => {
-    const file = e.target.files && e.target.files[0]; if (!file) return;
-    const url = URL.createObjectURL(file);
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";                      // let re-selecting the same file fire change
+    if (!file) return;
+    freeUserBg();                             // release any previous upload first
+    userBgURL = URL.createObjectURL(file);
     if (file.type.startsWith("video")) {
       const v = document.createElement("video");
-      v.src = url; v.loop = v.muted = v.playsInline = v.autoplay = true;
+      v.src = userBgURL; v.loop = v.muted = v.playsInline = v.autoplay = true;
       v.play().catch(() => {});
       userBg = v;
     } else {
-      const im = new Image(); im.src = url; userBg = im;
+      const im = new Image(); im.src = userBgURL; userBg = im;
     }
     auto = false; fading = false; slideStart = performance.now();
     setDockEnabled(false); $("bgClear").style.display = "";
   });
   $("bgClear").onclick = () => {
-    userBg = null; auto = true; slideStart = performance.now();
+    freeUserBg(); auto = true; slideStart = performance.now();
     setDockEnabled(true); updateDock(); $("bgClear").style.display = "none";
   };
 
