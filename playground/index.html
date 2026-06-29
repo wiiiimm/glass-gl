@@ -38,7 +38,7 @@
     will-change: left, top;
   }
   .shape.dragging { cursor: grabbing; box-shadow: 0 44px 100px rgb(0 0 0 / .5); }
-  .shape.dark { color: #0c1020; --border: .25; }
+  .shape.dark { --border: .35; }   /* dark = darker glass tint (shader); content stays light */
 
   /* gloss: a directional reflective sheen layered OVER the tile content
      (image + text). Steered by the angle dial, tuned by the two gloss sliders. */
@@ -102,12 +102,6 @@
   .tile .photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .tile .cap { margin: 11px 4px 2px; font-size: 14px; font-weight: 800; }
   .tile .sub { margin: 0 4px; font-size: 12px; font-weight: 600; opacity: .85; }
-  /* drag-handle affordance — grip dots, top-right of each tile */
-  .tile .grip {
-    position: absolute; top: 9px; right: 9px; width: 17px; height: 17px;
-    color: #fff; opacity: .65; pointer-events: none;
-    filter: drop-shadow(0 1px 2px rgb(0 0 0 / .45));
-  }
 
   .doc { width: 300px; padding: 22px 24px; }
   .doc h3 { margin: 0 0 8px; font-size: 16px; font-weight: 800; }
@@ -179,9 +173,17 @@
 
   .hint {
     position: fixed; left: 18px; bottom: 16px; z-index: 50;
-    padding: 9px 14px; border-radius: 12px; font-size: 12px; font-weight: 600; opacity: .92;
+    padding: 10px 15px; border-radius: 12px; font-size: 12px; font-weight: 600; opacity: .95;
+    display: flex; flex-direction: column; gap: 4px; cursor: grab;
   }
+  .hint.dragging { cursor: grabbing; }
   .hint b { font-weight: 800; }
+  .hint a {
+    display: inline-flex; align-items: center; gap: 6px; width: fit-content;
+    color: #fff; text-decoration: none; opacity: .9;
+  }
+  .hint a:hover { text-decoration: underline; }
+  .hint a svg { width: 15px; height: 15px; flex: 0 0 auto; }
 </style>
 </head>
 <body>
@@ -241,7 +243,12 @@
       <button class="btn ghost" id="bgBtn" style="width:100%;margin-top:8px">Change background…</button>
     </aside>
 
-    <p class="hint">Built with <b>glass-gl</b> · every surface here is <b>WebGL</b> glass</p>
+    <div class="hint">
+      <span>Built with <b>glass-gl</b> · drag <b>any</b> block — even the panel &amp; this footer</span>
+      <a href="https://github.com/wiiiimm/glass-gl" target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.37.5 0 5.84 0 12.42c0 5.26 3.44 9.72 8.2 11.3.6.11.82-.26.82-.58 0-.29-.01-1.05-.02-2.06-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.74.08-.74 1.2.09 1.84 1.25 1.84 1.25 1.07 1.85 2.81 1.32 3.5 1.01.11-.78.42-1.32.76-1.62-2.67-.31-5.47-1.35-5.47-5.99 0-1.32.47-2.4 1.24-3.25-.12-.31-.54-1.55.12-3.22 0 0 1.01-.33 3.3 1.24a11.4 11.4 0 0 1 6.01 0c2.29-1.57 3.3-1.24 3.3-1.24.66 1.67.24 2.91.12 3.22.77.85 1.24 1.93 1.24 3.25 0 4.65-2.8 5.67-5.48 5.97.43.38.81 1.13.81 2.28 0 1.65-.01 2.98-.01 3.38 0 .32.22.7.83.58C20.56 22.13 24 17.68 24 12.42 24 5.84 18.63.5 12 .5z"/></svg>
+        GitHub · github.com/wiiiimm/glass-gl</a>
+    </div>
   </div>
 
   <script type="module">
@@ -272,7 +279,7 @@
       p:`Tier 1 = CSS <code>blur()</code> (the panel). Tier 2 = SVG displacement. Tier 3 = this WebGL lens — the richest, and what the original used.` },
   ];
 
-  let zTop = 10;
+  let zTop = 100;   // dragged blocks jump above the panel/footer (z 50)
   function make(html, cls, x, y) {
     const el = document.createElement("div");
     el.className = `shape ${cls}`;
@@ -281,10 +288,7 @@
     glass.register(el);            // <-- this element is now liquid glass
     return el;
   }
-  const tileHTML = t => `<svg class="grip" viewBox="0 0 16 16" aria-hidden="true"><g fill="currentColor">
-        <circle cx="6" cy="4" r="1.3"/><circle cx="10" cy="4" r="1.3"/><circle cx="6" cy="8" r="1.3"/>
-        <circle cx="10" cy="8" r="1.3"/><circle cx="6" cy="12" r="1.3"/><circle cx="10" cy="12" r="1.3"/></g></svg>
-      <div class="photo"><img src="${t.img}" alt="" draggable="false"></div>
+  const tileHTML = t => `<div class="photo"><img src="${t.img}" alt="" draggable="false"></div>
       <div class="cap">${t.cap}</div><div class="sub">${t.sub}</div>`;
   const docHTML = d => `<span class="pill">${d.pill}</span><h3>${d.h}</h3><p>${d.p}</p>`;
 
@@ -334,10 +338,14 @@
   /* ===================== dragging ===================== */
   let drag = null;
   scene.addEventListener("pointerdown", (e) => {
-    const s = e.target.closest(".shape"); if (!s) return;
+    if (e.target.closest("input, button, a, .dial")) return;   // don't hijack controls / links
+    const s = e.target.closest(".shape, .panel, .hint"); if (!s) return;
+    const r = s.getBoundingClientRect();                        // pin to left/top (works for the fixed panel & footer)
+    s.style.left = r.left + "px"; s.style.top = r.top + "px";
+    s.style.right = "auto"; s.style.bottom = "auto";
     s.style.zIndex = ++zTop; s.classList.add("dragging");
     s.setPointerCapture(e.pointerId);
-    drag = { s, dx: e.clientX - s.offsetLeft, dy: e.clientY - s.offsetTop };
+    drag = { s, dx: e.clientX - r.left, dy: e.clientY - r.top };
   });
   scene.addEventListener("pointermove", (e) => {
     if (!drag) return; const { s } = drag;
@@ -455,7 +463,7 @@
     glass.setParams({
       blur:       P.blur / 10,
       refraction: P.lens / 100,
-      liquidness: P.white / 100,
+      liquidness: Math.max(P.white / 100, P.tint === "dark" ? 0.35 : 0),  // dark glass needs a tint floor to show
       edgeLight:  P.edge / 100,
       edgeFrost:  P.frost / 100,
       radius:     P.radius,
