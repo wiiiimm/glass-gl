@@ -321,7 +321,7 @@
   sizeStage();
   window.addEventListener("resize", sizeStage);
 
-  const HOLD = 9000, FADE = 1400, KB = 16000;   // ms: hold per slide, crossfade, ken-burns cycle
+  const HOLD = 9000, FADE = 1400;   // ms: hold per slide before advancing, cross-fade duration
   let curIdx = 0, nextIdx = 1, slideStart = performance.now();
   let fading = false, fadeStart = 0, auto = true, userBg = null;
 
@@ -329,15 +329,25 @@
   const srcW = m => m.naturalWidth  || m.videoWidth  || 0;
   const srcH = m => m.naturalHeight || m.videoHeight || 0;
 
-  function drawSlide(m, phase, alpha) {
+  // Ken Burns from ONE continuous clock (smooth sine drift, never resets). Every
+  // slide is drawn with the SAME transform, so a cross-fade is a clean opacity
+  // blend at matched scale — no shrink/pop when the image changes.
+  function kb(now) {
+    const a = now / 11000;
+    return {
+      z:  1.12 + 0.05 * Math.sin(a),          // zoom 1.07 → 1.17, smooth
+      px: 0.028 * Math.sin(a * 0.55),         // slow lissajous pan (fraction of stage)
+      py: 0.022 * Math.cos(a * 0.47),
+    };
+  }
+  function drawSlide(m, k, alpha) {
     if (!srcReady(m)) return;
     const iw = srcW(m), ih = srcH(m), ia = iw / ih, ca = stageW / stageH;
-    const z = 1.05 + 0.12 * phase;                       // slow zoom 1.05 → 1.17
     let dw, dh;
     if (ca > ia) { dw = stageW; dh = stageW / ia; } else { dh = stageH; dw = stageH * ia; }
-    dw *= z; dh *= z;
-    const dx = (stageW - dw) / 2 + (phase - 0.5) * 0.05 * stageW;   // gentle pan
-    const dy = (stageH - dh) / 2 + (phase - 0.5) * 0.04 * stageH;
+    dw *= k.z; dh *= k.z;
+    const dx = (stageW - dw) / 2 + k.px * stageW;
+    const dy = (stageH - dh) / 2 + k.py * stageH;
     sx.globalAlpha = alpha; sx.drawImage(m, dx, dy, dw, dh); sx.globalAlpha = 1;
   }
   function drawText() {
@@ -355,23 +365,19 @@
   }
   function renderStage(now) {
     sx.clearRect(0, 0, stageW, stageH);
+    const k = kb(now);                      // one shared transform → seamless cross-fades
     if (userBg) {
-      drawSlide(userBg, userBg instanceof HTMLVideoElement ? 0.5 : ((now - slideStart) % KB) / KB, 1);
+      drawSlide(userBg, k, 1);
     } else {
-      const phase = ((now - slideStart) % KB) / KB;
-      drawSlide(slideImgs[curIdx], phase, 1);
+      drawSlide(slideImgs[curIdx], k, 1);
       if (fading) {
         const t = Math.min(1, (now - fadeStart) / FADE);
-        drawSlide(slideImgs[nextIdx], ((now - fadeStart) % KB) / KB, t);
+        drawSlide(slideImgs[nextIdx], k, t);
         if (t >= 1) { curIdx = nextIdx; fading = false; slideStart = now; updateDock(); }
       } else if (auto && now - slideStart > HOLD) {
         nextIdx = (curIdx + 1) % SLIDES.length; fading = true; fadeStart = now; updateDock();
       }
     }
-    // dark overlay over the photo — lifts contrast so the glass + baked text read
-    // clearly on any image. Sits under the text (drawn next), over the photo.
-    sx.fillStyle = "rgba(8, 10, 18, 0.34)";
-    sx.fillRect(0, 0, stageW, stageH);
     drawText();
   }
   renderStage(performance.now());
