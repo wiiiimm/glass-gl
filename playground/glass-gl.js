@@ -28,7 +28,7 @@ const FRAG = `
   uniform float uWhite;    // liquidness (mix toward tint)
   uniform float uEdge;     // edge-light strength
   uniform float uFrost;    // edge frost: rim width + brightness (0..1)
-  uniform float uRadius;   // corner radius (px) — match the element's border-radius
+  uniform float uRad[MAX]; // per-surface corner radius (px) — match each element's border-radius
   uniform vec3  uTint;     // milk colour
   uniform sampler2D iChannel0;
 
@@ -51,7 +51,7 @@ const FRAG = `
     float best = 1e9; vec2 bPos = vec2(0.0); vec2 bHalf = vec2(1.0);
     for (int i = 0; i < MAX; i++) {
       if (i < uCount) {
-        float r = min(uRadius, min(uHalf[i].x, uHalf[i].y));
+        float r = min(uRad[i], min(uHalf[i].x, uHalf[i].y));
         float d = sdRoundBox(frag - uPos[i], uHalf[i], r);
         if (d < best) { best = d; bPos = uPos[i]; bHalf = uHalf[i]; }
       }
@@ -106,7 +106,7 @@ export function createGlass({ canvas, background, params } = {}) {
   if (!gl) throw new Error("createGlass: WebGL not available");
 
   const P = { ...DEFAULT_PARAMS, ...(params || {}) };
-  const surfaces = new Set();          // registered elements
+  const surfaces = new Map();          // registered element -> opts ({ radius? })
   let imgW = 1600, imgH = 1000;
   let raf = 0, alive = true;
 
@@ -132,7 +132,7 @@ export function createGlass({ canvas, background, params } = {}) {
 
   const U = {};
   ["iResolution","uImgRes","uPos","uHalf","uCount","uBlur","uLens","uWhite",
-   "uEdge","uFrost","uRadius","uTint","iChannel0"].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+   "uEdge","uFrost","uRad","uTint","iChannel0"].forEach(n => U[n] = gl.getUniformLocation(prog, n));
 
   /* ---- background texture ---- */
   const tex = gl.createTexture();
@@ -187,16 +187,18 @@ export function createGlass({ canvas, background, params } = {}) {
   /* ---- render loop ---- */
   const posArr = new Float32Array(MAX * 2);
   const halfArr = new Float32Array(MAX * 2);
+  const radArr = new Float32Array(MAX);
   function frame() {
     if (!alive) return;
     let n = 0;
-    surfaces.forEach(el => {
+    surfaces.forEach((opts, el) => {
       if (n >= MAX) return;
       const r = el.getBoundingClientRect();
       posArr[n*2]   = r.left + r.width / 2;
       posArr[n*2+1] = canvas.height - (r.top + r.height / 2);  // flip y
       halfArr[n*2]   = r.width / 2 + 2;
       halfArr[n*2+1] = r.height / 2 + 2;
+      radArr[n]      = (opts && opts.radius != null) ? opts.radius : P.radius;
       n++;
     });
 
@@ -211,7 +213,7 @@ export function createGlass({ canvas, background, params } = {}) {
     gl.uniform1f(U.uWhite, P.liquidness);
     gl.uniform1f(U.uEdge, P.edgeLight);
     gl.uniform1f(U.uFrost, P.edgeFrost);
-    gl.uniform1f(U.uRadius, P.radius);
+    gl.uniform1fv(U.uRad, radArr);
     gl.uniform3f(U.uTint, P.tint[0], P.tint[1], P.tint[2]);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -223,7 +225,7 @@ export function createGlass({ canvas, background, params } = {}) {
 
   /* ---- public API ---- */
   return {
-    register(el)   { surfaces.add(el); return () => surfaces.delete(el); },
+    register(el, opts = {}) { surfaces.set(el, opts); return () => surfaces.delete(el); },
     unregister(el) { surfaces.delete(el); },
     clear()        { surfaces.clear(); },
     setParams(next) { Object.assign(P, next); },

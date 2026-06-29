@@ -40,6 +40,33 @@
   .shape.dragging { cursor: grabbing; box-shadow: 0 44px 100px rgb(0 0 0 / .5); }
   .shape.dark { color: #0c1020; --border: .25; }
 
+  /* gloss: a directional reflective sheen layered OVER the tile content
+     (image + text). Steered by the angle dial, tuned by the two gloss sliders. */
+  .shape::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(var(--gloss-angle, 210deg),
+      rgba(255,255,255, var(--gloss-strength, 0.35)) 0%,
+      rgba(255,255,255, 0) var(--gloss-size, 45%));
+  }
+
+  /* circular angle control */
+  .dial {
+    width: 60px; height: 60px; margin: 2px auto 0; border-radius: 50%;
+    border: 1px solid rgb(255 255 255 / .35); background: rgb(255 255 255 / .07);
+    position: relative; cursor: grab; touch-action: none;
+  }
+  .dial::before {
+    content: ""; position: absolute; inset: 0; border-radius: 50%;
+    background: radial-gradient(circle at 50% 32%, rgb(255 255 255 / .18), transparent 60%);
+  }
+  .dial-handle { position: absolute; inset: 0; transform: rotate(var(--a, 0deg)); }
+  .dial-handle::after {
+    content: ""; position: absolute; top: 4px; left: 50%; margin-left: -4.5px;
+    width: 9px; height: 9px; border-radius: 50%; background: #fff;
+    box-shadow: 0 1px 4px rgb(0 0 0 / .4);
+  }
+
   .tile { width: 230px; padding: 15px; }
   .tile .photo {
     width: 100%; aspect-ratio: 1 / 1; border-radius: 18px; overflow: hidden;
@@ -67,9 +94,9 @@
      canvas behind it), so the page shows BOTH techniques side by side.
      ========================================================================= */
   .panel, .hint {
-    background: rgb(255 255 255 / .12);
-    -webkit-backdrop-filter: blur(22px) saturate(1.3);
-    backdrop-filter: blur(22px) saturate(1.3);
+    /* transparent so the WebGL glass behind them shows through (they're
+       registered with the engine). Border + shadow + inset highlight = definition. */
+    background: transparent;
     border: 1px solid rgb(255 255 255 / .3);
     box-shadow: 0 24px 60px rgb(0 0 0 / .28), inset 0 1px 0 rgb(255 255 255 / .4);
   }
@@ -152,6 +179,12 @@
         <input type="range" id="s-edge" min="0" max="200" step="5"></div>
       <div class="ctrl"><div class="row"><label>Edge frost <span style="opacity:.6">(rim border)</span></label><span class="val" id="v-frost"></span></div>
         <input type="range" id="s-frost" min="0" max="100" step="2"></div>
+      <div class="ctrl"><div class="row"><label>Gloss <span style="opacity:.6">(reflective top)</span></label><span class="val" id="v-gloss"></span></div>
+        <input type="range" id="s-gloss" min="0" max="100" step="2"></div>
+      <div class="ctrl"><div class="row"><label>Gloss size</label><span class="val" id="v-glosssize"></span></div>
+        <input type="range" id="s-glosssize" min="0" max="100" step="2"></div>
+      <div class="ctrl"><div class="row"><label>Gloss angle</label><span class="val" id="v-glossangle"></span></div>
+        <div class="dial" id="glossDial"><div class="dial-handle"></div></div></div>
       <div class="ctrl"><div class="row"><label>Corner radius <span style="opacity:.6">(glass + frame)</span></label><span class="val" id="v-radius"></span></div>
         <input type="range" id="s-radius" min="8" max="54" step="1"></div>
 
@@ -170,9 +203,12 @@
         <button class="btn primary" id="add">+ Add tile</button>
         <button class="btn ghost" id="reset">Reset</button>
       </div>
+      <button class="btn ghost" id="copy" style="width:100%;margin-top:8px">Copy settings</button>
+      <input type="file" id="bgFile" accept="image/*" style="display:none">
+      <button class="btn ghost" id="bgBtn" style="width:100%;margin-top:8px">Change background…</button>
     </aside>
 
-    <p class="hint">Built with the <b>glass-ui</b> skill · the panel is CSS glass · the cards are <b>WebGL</b> glass</p>
+    <p class="hint">Built with <b>glass-gl</b> · every surface here is <b>WebGL</b> glass</p>
   </div>
 
   <script type="module">
@@ -187,7 +223,7 @@
   const glass = createGlass({ canvas: canvasEl, background: "images/bg.jpg" });
 
   /* ===================== glass params ===================== */
-  const DEFAULTS = { blur:12, lens:22, white:0, edge:100, frost:22, border:45, radius:30, shadow:35, tint:"light" };
+  const DEFAULTS = { blur:12, lens:22, white:0, edge:100, frost:22, gloss:35, glosssize:50, border:45, radius:30, shadow:35, tint:"light" };
   const P = { ...DEFAULTS, tintRGB:[1,1,1] };
 
   /* ===================== draggable objects ===================== */
@@ -221,6 +257,10 @@
     TILES.forEach(t => make(tileHTML(t), "tile", t.x, t.y));
     DOCS.forEach(d => make(docHTML(d), "doc", d.x, d.y));
     applyDOM();
+    applyGloss();
+    // the UI chrome is WebGL glass too — register with their own corner radii
+    glass.register(document.querySelector(".panel"), { radius: 22 });
+    glass.register(document.querySelector(".hint"),  { radius: 12 });
   }
 
   /* ===================== dragging ===================== */
@@ -249,6 +289,8 @@
     white: { el:$("s-white"), out:$("v-white"), fmt:v=>v==0?"off":(v/100).toFixed(2) },
     edge:  { el:$("s-edge"),  out:$("v-edge"),  fmt:v=>(v/100).toFixed(2)+"×" },
     frost: { el:$("s-frost"), out:$("v-frost"), fmt:v=>v==0?"off":(v/100).toFixed(2) },
+    gloss: { el:$("s-gloss"), out:$("v-gloss"), fmt:v=>v==0?"off":(v/100).toFixed(2) },
+    glosssize:{ el:$("s-glosssize"), out:$("v-glosssize"), fmt:v=>(v/100).toFixed(2) },
     border:{ el:$("s-border"),out:$("v-border"),fmt:v=>(v/100).toFixed(2) },
     radius:{ el:$("s-radius"),out:$("v-radius"),fmt:v=>v+"px" },
     shadow:{ el:$("s-shadow"),out:$("v-shadow"),fmt:v=>(v/100).toFixed(2) },
@@ -267,9 +309,37 @@
     C[key].el.addEventListener("input", () => {
       readSlider(key);
       if (key === "border" || key === "radius" || key === "shadow") applyDOM();
+      if (key === "gloss" || key === "glosssize") applyGloss();
       pushParams();
     });
   });
+
+  /* gloss overlay (CSS, sits OVER tile content incl. images) + angle dial */
+  let glossAngle = 35;
+  function applyGloss() {
+    const ga = (glossAngle + 180) % 360;   // bright edge points toward the dial handle
+    document.querySelectorAll(".shape").forEach(s => {
+      s.style.setProperty("--gloss-strength", P.gloss / 100);
+      s.style.setProperty("--gloss-size", P.glosssize + "%");
+      s.style.setProperty("--gloss-angle", ga + "deg");
+    });
+  }
+  const glossDial = $("glossDial"), glossHandle = glossDial.querySelector(".dial-handle");
+  function setGlossAngle(deg) {
+    glossAngle = ((deg % 360) + 360) % 360;
+    glossHandle.style.setProperty("--a", glossAngle + "deg");
+    $("v-glossangle").textContent = Math.round(glossAngle) + "°";
+    applyGloss();
+  }
+  let dialDrag = false;
+  function dialFromEvent(e) {
+    const r = glossDial.getBoundingClientRect();
+    const deg = Math.atan2(e.clientY - (r.top + r.height/2), e.clientX - (r.left + r.width/2)) * 180 / Math.PI + 90;
+    setGlossAngle(deg);
+  }
+  glossDial.addEventListener("pointerdown", e => { dialDrag = true; glossDial.setPointerCapture(e.pointerId); dialFromEvent(e); });
+  glossDial.addEventListener("pointermove", e => { if (dialDrag) dialFromEvent(e); });
+  glossDial.addEventListener("pointerup", () => dialDrag = false);
 
   function setTint(mode) {
     P.tint = mode;
@@ -282,23 +352,23 @@
   $("t-light").onclick = () => setTint("light");
   $("t-dark").onclick = () => setTint("dark");
 
+  const ADDIMGS = ["images/pic-1.svg","images/pic-2.svg","images/pic-3.svg","images/pic-4.svg","images/avatar.png"];
   let addN = 0;
   $("add").onclick = () => {
-    const imgs = ["images/pic-1.svg","images/pic-2.svg","images/pic-3.svg","images/pic-4.svg","images/avatar.png"];
-    const t = { img: imgs[addN % imgs.length], cap:"New glass tile", sub:"#" + (addN+1) };
-    const x = 90 + (addN*43) % Math.max(140, innerWidth - 700);
-    const y = 90 + (addN*61) % Math.max(140, innerHeight - 360);
-    const el = make(tileHTML(t), "tile", x, y); addN++;
+    const t = { img: ADDIMGS[addN % ADDIMGS.length], cap:"New glass tile", sub:"#" + (addN+1),
+                x: 90 + (addN*43) % Math.max(140, innerWidth - 700),
+                y: 90 + (addN*61) % Math.max(140, innerHeight - 360) };
+    const el = make(tileHTML(t), "tile", t.x, t.y); addN++;
     el.style.zIndex = ++zTop;
     if (P.tint === "dark") el.classList.add("dark");
-    applyDOM();
+    applyDOM(); applyGloss();
   };
 
   /* presets — "Clear" = crystal-clear see-through glass (no blur, no milk,
      light refraction); "Frosted" = heavy blur; "Liquid" = strong lens. */
   const PRESETS = {
     clear:   { blur:0,  lens:16, white:0,  edge:40,  frost:0  },
-    frosted: { blur:22, lens:6,  white:14, edge:90,  frost:70 },
+    frosted: { blur:28, lens:10, white:23, edge:35, frost:6 },
     liquid:  { blur:10, lens:32, white:16, edge:140, frost:30 },
   };
   function applyPreset(name) {
@@ -331,11 +401,65 @@
     setTint(DEFAULTS.tint);
     pushParams();
     buildScene();
+    setGlossAngle(35);
   }
   $("reset").onclick = resetAll;
 
-  /* init — glass-gl owns the render loop + resize; we just drive params + shapes */
+  /* ===================== copy settings ===================== */
+  function settingsText() {
+    const f = n => +n.toFixed(2);
+    const e = {
+      blur:       f(P.blur / 10),
+      refraction: f(P.lens / 100),
+      liquidness: f(P.white / 100),
+      edgeLight:  f(P.edge / 100),
+      edgeFrost:  f(P.frost / 100),
+      radius:     P.radius,
+      tint:       P.tintRGB,
+    };
+    const snippet = `glass.setParams(${JSON.stringify(e)});`;
+    return [
+      "glass-gl settings",
+      `  blur        ${e.blur}`,
+      `  refraction  ${e.refraction}`,
+      `  liquidness  ${e.liquidness}`,
+      `  edgeLight   ${e.edgeLight}`,
+      `  edgeFrost   ${e.edgeFrost}`,
+      `  gloss       ${f(P.gloss/100)}  size ${P.glosssize}%  angle ${Math.round(glossAngle)}°  (CSS overlay)`,
+      `  radius      ${e.radius}px`,
+      `  tint        ${P.tint} [${P.tintRGB.join(", ")}]`,
+      `  border      ${f(P.border / 100)}   shadow ${f(P.shadow / 100)}`,
+      "",
+      snippet,
+    ].join("\n");
+  }
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+    const ta = document.createElement("textarea");        // http / non-secure fallback
+    ta.value = text; ta.style.position = "fixed"; ta.style.top = "-1000px"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    let ok = false; try { ok = document.execCommand("copy"); } catch (err) {}
+    document.body.removeChild(ta);
+    return ok ? Promise.resolve() : Promise.reject();
+  }
+  /* replace the wallpaper the glass refracts (any local image) */
+  $("bgBtn").onclick = () => $("bgFile").click();
+  $("bgFile").addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) glass.setBackground(URL.createObjectURL(file));
+  });
+
+  $("copy").onclick = () => {
+    const btn = $("copy"), label = "Copy settings";
+    copyText(settingsText())
+      .then(() => { btn.textContent = "Copied ✓"; })
+      .catch(() => { btn.textContent = "Copy failed — press ⌘C"; })
+      .finally(() => setTimeout(() => { btn.textContent = label; }, 1500));
+  };
+
+  /* init — glass-gl owns its render loop + resize; we just drive params + shapes */
   resetAll();
+  applyPreset("clear");   // default to the Clear look on load
   </script>
 </body>
 </html>
