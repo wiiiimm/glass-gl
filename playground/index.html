@@ -78,6 +78,22 @@
     filter: drop-shadow(0 1px 1px rgb(0 0 0 / .25));
   }
 
+  /* glass icon circle — a circle is just a glass surface registered with radius = half its size */
+  .shape.iconbtn {
+    width: 76px; height: 76px; padding: 0; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .shape.iconbtn .icon { width: 32px; height: 32px; color: #fff; filter: drop-shadow(0 1px 2px rgb(0 0 0 / .45)); }
+
+  /* iPhone-style bottom app bar — one glass pill holding 5 icons */
+  .shape.appbar {
+    width: 374px; height: 66px; padding: 0 24px; border-radius: 33px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .shape.appbar .icon { width: 26px; height: 26px; color: #fff; filter: drop-shadow(0 1px 2px rgb(0 0 0 / .45)); }
+  .shape.appbar .icon:first-child { color: #fff; opacity: 1; }
+  .shape.appbar .icon { opacity: .82; }
+
   .tile { width: 230px; padding: 15px; }
   .tile .photo {
     width: 100%; aspect-ratio: 1 / 1; border-radius: 18px; overflow: hidden;
@@ -271,6 +287,19 @@
       <div class="photo"><img src="${t.img}" alt="" draggable="false"></div>
       <div class="cap">${t.cap}</div><div class="sub">${t.sub}</div>`;
   const docHTML = d => `<span class="pill">${d.pill}</span><h3>${d.h}</h3><p>${d.p}</p>`;
+
+  /* simple original stroke icons (minimalist line style) */
+  const ICONS = {
+    home:    `<path d="M4 11 12 4l8 7"/><path d="M6 10v9.5h12V10"/><path d="M9.5 19.5V14h5v5.5"/>`,
+    search:  `<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>`,
+    heart:   `<path d="M20.8 5.7a5 5 0 0 0-7.1 0L12 7.4l-1.7-1.7a5 5 0 1 0-7.1 7.1l1.7 1.7L12 21l7.1-6.5 1.7-1.7a5 5 0 0 0 0-7.1Z"/>`,
+    user:    `<circle cx="12" cy="8.5" r="3.5"/><path d="M5.5 20c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5"/>`,
+    plus:    `<path d="M12 5.5v13M5.5 12h13"/>`,
+    message: `<path d="M20.5 11.5a8 8 0 0 1-11.4 7.2L4 20.5l1.8-5.1A8 8 0 1 1 20.5 11.5Z"/>`,
+  };
+  const iconSVG = (name) =>
+    `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
   function buildScene() {
     scene.querySelectorAll(".shape").forEach(s => s.remove());
     glass.clear();                 // drop stale element refs before re-registering
@@ -279,6 +308,24 @@
     const wm = make('<span class="wm">glass-gl</span>', "wordmark", 0, 0);
     wm.style.left = Math.round((innerWidth - wm.offsetWidth) / 2) + "px";   // centre on the canvas
     wm.style.top  = Math.round((innerHeight - wm.offsetHeight) / 2) + "px";
+
+    // 4 glass icon circles (circle = surface registered with radius = half its size)
+    const CIRCLE = ["home", "search", "heart", "user"];
+    const CW = 76, CGAP = 28, cTotal = CIRCLE.length * CW + (CIRCLE.length - 1) * CGAP;
+    const cStart = Math.round((innerWidth - cTotal) / 2);
+    CIRCLE.forEach((n, i) => {
+      const el = make(iconSVG(n), "iconbtn", cStart + i * (CW + CGAP), 44);
+      glass.register(el, { radius: CW / 2 });
+    });
+
+    // iPhone-style bottom app bar — one glass pill with 5 icons
+    const BAR = ["home", "search", "plus", "message", "user"];
+    const BARW = 374, BARH = 66;
+    const bar = make(BAR.map(iconSVG).join(""), "appbar", 0, 0);
+    bar.style.left = Math.round((innerWidth - BARW) / 2) + "px";
+    bar.style.top  = (innerHeight - BARH - 30) + "px";
+    glass.register(bar, { radius: BARH / 2 });
+
     applyDOM();
     applyGloss();
     // the UI chrome is WebGL glass too — register with their own corner radii
