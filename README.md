@@ -57,6 +57,19 @@ cd playground && python3 -m http.server 8000
 # open http://localhost:8000
 ```
 
+## Releasing
+
+`glass-gl` ships from `packages/glass-gl`, and the release process is kept simple while the
+project is experimental:
+
+1. Bump the `version` in `packages/glass-gl/package.json`.
+2. Commit (Conventional Commits — `feat:` / `fix:` / `chore:` …) and push to `main`.
+3. CI (`.github/workflows/publish.yml`) publishes to npm and cuts a matching GitHub Release —
+   only when that version isn't already on npm, so ordinary pushes don't republish.
+
+Full semantic-release automation and the `production` deploy gate are intentionally deferred;
+see `AGENTS.md` and `.claude/skills/` for that setup when it's needed.
+
 ## License
 
 MIT © wiiiimm

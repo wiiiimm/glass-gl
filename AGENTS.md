@@ -3,23 +3,27 @@
 Guidance for AI coding agents (Claude Code, Cursor, Codex, etc.) working in this repo.
 `CLAUDE.md` is a symlink to this file — keep all agent guidance here.
 
-## Release & commit workflow (see `.claude/skills/`)
+## Release & commit workflow
 
-This repo uses Conventional Commits + semantic-release, with **pooled releases** and a
-**`production` branch** gate. Installed skills carry the details — load them when relevant:
+**Current method — kept deliberately simple while the project is experimental:**
 
-- **conventional-commits** — every commit/PR title is `type(scope): description`
-  (`feat`/`fix`/… ; `feat!` or a `BREAKING CHANGE:` footer for majors). This is what drives
-  automated version bumps and the changelog, so non-conventional commits break releases.
-- **semantic-release-automation** — versioning, CHANGELOG, tags, GitHub Releases, and npm
-  publish are automated from those commits (package: `packages/glass-gl`).
-- **pooled-release** — we do NOT release on every merge to `main`. Releases are **pooled**
-  (cut on demand / on a cadence) so each release has one readable changelog.
-- **production-release-gating** — `main` is development; the **`production` branch** is the
-  promotion gate (only a real release/promotion ships prod, not every commit).
+- **Use Conventional Commits** — `type(scope): description` (`feat`/`fix`/`chore`/`ci`/`docs`/…;
+  `feat!` or a `BREAKING CHANGE:` footer for majors). Free good habit, and makes a later switch
+  to semantic-release trivial.
+- **Releasing = manual version bump.** Edit the `version` in `packages/glass-gl/package.json`,
+  commit, and push to `main`. CI (`.github/workflows/publish.yml`) then publishes to npm and
+  cuts a GitHub Release — **only when that version isn't already on npm**, so ordinary pushes
+  don't republish. This is effectively a lightweight pooled release: pool commits, bump when a
+  version is worth cutting.
+- `glass-gl` is a **package**, so `npm publish` *is* the release — there is no prod deploy to gate.
 
-Practical rule: commit to `main` with conventional messages; cut a pooled release when ready;
-promote to `production` to ship. Don't wire "publish on every push to main."
+**Deferred (until there are users / a real cadence):** full semantic-release automation,
+commit-driven auto-versioning, changelog generation, and pooled-release triggers. Reference
+skills for that day live in `.claude/skills/` (`conventional-commits`,
+`semantic-release-automation`, `pooled-release`, `production-release-gating`).
+
+**`production` branch** exists but is **reserved for the future demo-site deploy** (Vercel
+gating — "don't deploy every commit to prod"), NOT for the npm package.
 
 ## What this project is
 
