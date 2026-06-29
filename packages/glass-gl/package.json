@@ -1,0 +1,37 @@
+{
+  "name": "glass-gl",
+  "version": "0.0.1",
+  "description": "Real WebGL liquid glass for the web — any element refracts the background like a glass lens (not just backdrop-filter blur).",
+  "type": "module",
+  "main": "./glass-gl.js",
+  "module": "./glass-gl.js",
+  "exports": {
+    ".": "./glass-gl.js"
+  },
+  "files": [
+    "glass-gl.js",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "keywords": [
+    "glass",
+    "liquid-glass",
+    "glassmorphism",
+    "webgl",
+    "refraction",
+    "shader",
+    "ui",
+    "lens"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wiiiimm/glass-gl.git",
+    "directory": "packages/glass-gl"
+  },
+  "homepage": "https://github.com/wiiiimm/glass-gl#readme",
+  "bugs": {
+    "url": "https://github.com/wiiiimm/glass-gl/issues"
+  },
+  "license": "MIT",
+  "author": "wiiiimm"
+}
