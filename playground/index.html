@@ -321,9 +321,7 @@
     // iPhone-style bottom app bar — one glass pill with 5 icons
     const BAR = ["home", "search", "plus", "message", "user"];
     const BARW = 374, BARH = 66;
-    const bar = make(BAR.map(iconSVG).join(""), "appbar", 0, 0);
-    bar.style.left = Math.round((innerWidth - BARW) / 2) + "px";
-    bar.style.top  = (innerHeight - BARH - 30) + "px";
+    const bar = make(BAR.map(iconSVG).join(""), "appbar", 60, 378);   // left-middle, just under the first tile
     glass.register(bar, { radius: BARH / 2 });
 
     applyDOM();
