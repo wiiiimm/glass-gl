@@ -4,8 +4,11 @@ Real **WebGL liquid glass** for the web — a tiny, framework-agnostic engine th
 any DOM element refract the background behind it like a physical glass lens (bend +
 magnify + frost + edge light), not just a `backdrop-filter` blur.
 
-> Status: early / work in progress. The engine works; packaging and the React wrapper
-> are in progress.
+![glass-gl playground — draggable glass cards refracting a photo background, with a live control panel](docs/playground.jpg)
+
+> **⚠️ Experimental.** Early and evolving — the API, parameters, and visuals may change
+> without notice, and it isn't production-hardened yet. The engine works; packaging and a
+> React wrapper are in progress.
 
 ## What it does
 
