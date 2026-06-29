@@ -94,21 +94,13 @@
 
   /* iPhone-style bottom app bar — one glass pill holding 5 icons */
   .shape.appbar {
-    width: 374px; height: 66px; padding: 0 18px; border-radius: 33px;
+    width: 374px; height: 66px; padding: 0 24px; border-radius: 33px;
     display: flex; align-items: center; justify-content: space-between;
   }
-  .shape.appbar .appitem {
-    width: 46px; height: 46px; border-radius: 50%; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: transform .22s cubic-bezier(.34, 1.56, .64, 1), background .18s ease;
-  }
-  .shape.appbar .appitem:hover { background: rgb(255 255 255 / .16); transform: translateY(-5px) scale(1.06); }
-  .shape.appbar .appitem:active { transform: translateY(-1px) scale(.94); transition-duration: .09s; }
   .shape.appbar .icon {
     width: 26px; height: 26px; color: #fff; opacity: .82;
-    filter: drop-shadow(0 1px 2px rgb(0 0 0 / .45)); transition: opacity .18s ease;
+    filter: drop-shadow(0 1px 2px rgb(0 0 0 / .45));
   }
-  .shape.appbar .appitem:hover .icon { opacity: 1; }
 
   .tile { width: 230px; padding: 15px; }
   .tile .photo {
@@ -377,7 +369,7 @@
     // iPhone-style bottom app bar — one glass pill with 5 icons
     const BAR = ["home", "search", "plus", "message", "user"];
     const BARW = 374, BARH = 66;
-    const bar = make(BAR.map(n => `<span class="appitem">${iconSVG(n)}</span>`).join(""), "appbar", 60, 378);   // left-middle, just under the first tile
+    const bar = make(BAR.map(iconSVG).join(""), "appbar", 60, 378);   // left-middle, just under the first tile
     glass.register(bar, { radius: BARH / 2 });
 
     applyDOM();
