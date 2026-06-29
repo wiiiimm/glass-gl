@@ -3,112 +3,102 @@
 Guidance for AI coding agents (Claude Code, Cursor, Codex, etc.) working in this repo.
 `CLAUDE.md` is a symlink to this file — keep all agent guidance here.
 
-## Release & commit workflow
-
-**Current method — kept deliberately simple while the project is experimental:**
-
-- **Use Conventional Commits** — `type(scope): description` (`feat`/`fix`/`chore`/`ci`/`docs`/…;
-  `feat!` or a `BREAKING CHANGE:` footer for majors). Free good habit, and makes a later switch
-  to semantic-release trivial.
-- **Releasing = bump version, then run the workflow (manual, not on push).** Edit the
-  `version` in `packages/glass-gl/package.json` and commit. Then trigger the **Publish glass-gl**
-  workflow — Actions tab → *Run workflow*, or `gh workflow run "Publish glass-gl" --repo wiiiimm/glass-gl`.
-  It publishes to npm + cuts a GitHub Release, but **only when that version isn't already on npm**
-  (a stray run won't republish). It deliberately does **not** run on push, so a routine commit to
-  `main` can't surprise-publish. Effectively a lightweight pooled release: pool commits, bump +
-  release when worth it.
-- `glass-gl` is a **package**, so `npm publish` *is* the release — there is no prod deploy to gate.
-- **Engine is one file:** `packages/glass-gl/glass-gl.js` is the canonical source;
-  `playground/glass-gl.js` is a **symlink** to it. Edit the package file — never replace the
-  symlink with a copy (it exists so the demo and the published package can't drift).
-
-**Deferred (until there are users / a real cadence):** full semantic-release automation,
-commit-driven auto-versioning, changelog generation, and pooled-release triggers. Reference
-skills for that day live in `.claude/skills/` (`conventional-commits`,
-`semantic-release-automation`, `pooled-release`, `production-release-gating`).
-
-**`production` branch** exists but is **reserved for the future demo-site deploy** (Vercel
-gating — "don't deploy every commit to prod"), NOT for the npm package.
-
 ## What this project is
 
-A **glass UI toolkit** distributed through several channels at once, from a single repo:
+**`glass-gl`** — a tiny, framework-agnostic **WebGL "liquid glass" engine**. It makes any DOM
+element refract the background behind it like a physical glass lens (bend, magnify, frost,
+edge-light), not just a `backdrop-filter` blur. Status: **experimental**.
 
-1. An **AI skill** (`SKILL.md`) teaching how to build glassmorphism / liquid-glass UI.
-2. A **CSS package** (`glass.css`) shippable via npm + CDN.
-3. A **shadcn registry** so people `npx shadcn add <url>` the React components.
-4. A **Claude Code plugin** (installable via a marketplace manifest).
-5. A **docs + demo website** (Next.js on Vercel) modeled on glasscn-components.vercel.app.
+The repo ships:
+- **The engine** — `packages/glass-gl/` (the npm package, name `glass-gl`).
+- **An interactive playground** — `playground/` — drag glass cards over a photo and tune every
+  parameter live. It is a *consumer* of the engine (proves the library works).
 
-The unique angle: glass at **three fidelity tiers**, in one place —
-- **Tier 1 — CSS `backdrop-filter` blur** (frosted; what most libraries stop at)
-- **Tier 2 — SVG `feDisplacementMap`** (real refraction/bending, no canvas)
-- **Tier 3 — WebGL fragment shader** (per-frame refraction lens; showpieces/exports)
+> Naming is settled: the product/package is **`glass-gl`** (repo `wiiiimm/glass-gl`). The local
+> folder is still named `glass-ui-kit` for historical reasons — that's fine, it doesn't matter.
 
-Most competing libraries are tier-1 only. Tiers 2–3 are the differentiator — protect them.
+## The core idea (and its hard limits)
 
-## Naming status (DECISION PENDING — do not hardcode prematurely)
+- **It's JS + WebGL, not CSS.** The glass is a fragment shader on a `<canvas>` behind the page.
+  You can't get this refraction with CSS alone — CSS can only blur (`backdrop-filter`).
+- **It bends a *background*, not the *page*.** The shader only samples the background texture you
+  give it (image / canvas / video / gradient). It **cannot** refract arbitrary live DOM behind it
+  (e.g. a `<p>`). Put content *on* the glass; give the glass a media background to refract.
+- For "frosted panel over live scrolling content", CSS `backdrop-filter` is the right tool — not
+  this. `glass-gl` is for glass over a media background: heroes, photo/video backdrops, tiles.
+- **Resource note:** the engine runs a continuous `requestAnimationFrame` loop (GPU stays awake).
+  Fine for a desktop showpiece; for mobile/always-on, an idle-pause would be worth adding.
 
-The product name is **not finalized**. Shortlist: `Refract` / `Vitre` / `Lucent Glass` /
-scoped `@wiiiimm/glass-ui`. Until decided, the repo folder is `glass-ui-kit` (placeholder).
-When the name lands, it must be set consistently in: `package.json`, the plugin manifest,
-the marketplace manifest, the shadcn registry, the site, and the skill's `name:` field.
-**If you touch publishing config, check whether the name is still a placeholder first.**
+## Engine = one file (no drift)
+
+`packages/glass-gl/glass-gl.js` is the **canonical source**. `playground/glass-gl.js` is a
+**symlink** to it (git mode `120000`). **Edit the package file**; never replace the symlink with a
+copy. npm still ships the real file; the demo follows the symlink, so they can't diverge.
+
+Public API: `createGlass({ canvas, background })` → `register(el, { radius })` / `unregister` /
+`clear` / `setParams({...})` / `setBackground(src)` / `destroy()`.
 
 ## Repository layout
 
-Current (built):
-- `plugins/glass-ui/skills/glass-ui/` — the canonical **skill** (SKILL.md, README, references/, assets/). **Single source of truth** for the glass technique + `glass.css`.
-- `plugins/glass-ui/.claude-plugin/` and `.claude-plugin/` — Claude plugin + marketplace manifests (to be written).
-- `src/ui/` — canonical React component source (to be written).
-- `public/` — built static output for Vercel (registry JSON, demo) (to be generated).
+- `packages/glass-gl/` — the npm package: `glass-gl.js` (canonical engine), `package.json`, `README.md`.
+- `playground/` — interactive demo: `index.html`, `glass-gl.js` (symlink), `images/`.
+- `.github/workflows/publish.yml` — manual-trigger npm publish + GitHub Release.
+- `.claude/skills/` — installed release/commit skills (reference only — see Release workflow).
+- `docs/` — screenshots used in the README.
+- `AGENTS.md` / `CLAUDE.md` (symlink), `README.md`, `LICENSE`.
+- `plugins/glass-ui/skills/glass-ui/` — **legacy/exploratory.** An earlier "glassmorphism across
+  CSS/SCSS/Tailwind/shadcn/SVG/WebGL" skill from before the project narrowed to the WebGL engine.
+  Not the current focus; left in place. Don't treat it as the source of truth.
 
-Planned (not yet built):
-- `site/` (or `app/`) — Next.js docs + demo website (Fumadocs or Nextra + shadcn).
-- `registry.json` + `public/r/*.json` — shadcn registry, built with `shadcn build`.
-- `.github/workflows/` — CI to publish npm, deploy the site, rebuild the registry.
+## Release & commit workflow
 
-## Canonical sources & the no-drift rule
+**Current method — kept deliberately simple while experimental:**
 
-- The **CSS** lives once at `plugins/glass-ui/skills/glass-ui/assets/glass.css`. Other
-  channels (npm, site, registry) must **copy from** it via a build step, never fork it.
-- The **skill** is the source of truth for technique docs. The website's docs should be
-  generated from / kept in sync with the skill's `references/*.md`, not rewritten.
-- If you change the glass recipe, update `glass.css` first, then propagate.
+- **Use Conventional Commits** — `type(scope): description` (`feat`/`fix`/`chore`/`ci`/`docs`/…;
+  `feat!` or a `BREAKING CHANGE:` footer for majors). Free good habit; makes a later switch to
+  semantic-release trivial.
+- **Releasing = bump version, then run the workflow (manual, not on push).** Edit the `version`
+  in `packages/glass-gl/package.json` and commit. Then trigger the **Publish glass-gl** workflow —
+  Actions tab → *Run workflow*, or `gh workflow run "Publish glass-gl" --repo wiiiimm/glass-gl`.
+  It publishes to npm + cuts a GitHub Release, but **only when that version isn't already on npm**
+  (a stray run won't republish), and it does **not** run on push (no surprise-publish).
+- `glass-gl` is a **package**, so `npm publish` *is* the release — there is no prod deploy to gate.
+- One-time setup: an **`NPM_TOKEN`** repo secret is required for CI to publish (see README / repo
+  settings). `v0.0.1` was the first publish (done via the npm CLI before CI existed).
+
+**Deferred (until there are users / a real cadence):** full semantic-release automation,
+commit-driven auto-versioning, changelog generation, pooled-release triggers. Reference skills for
+that day live in `.claude/skills/` (`conventional-commits`, `semantic-release-automation`,
+`pooled-release`, `production-release-gating`).
+
+**`production` branch** exists but is **reserved for the future demo-site deploy** (Vercel gating —
+"don't deploy every commit to prod"), NOT for the npm package.
 
 ## Conventions
 
-- Always ship the `-webkit-` prefix for `backdrop-filter`, and the `@supports` /
-  `prefers-reduced-transparency` fallbacks. Glass without fallbacks is a bug here.
-- Tier 2 (SVG `url()` on backdrop-filter) is **flaky in Safari** — always provide a blur
-  fallback. Never ship a refraction demo that's blank in Safari.
-- Glass is **only visible over a busy/colorful background** — every demo/example must place
-  glass over a gradient or image, never a flat color.
-- Keep `SKILL.md` lean; put depth in `references/`. Match existing file style.
+- **Glass needs a busy/colorful background to be visible** — every demo places glass over a photo
+  or gradient, never a flat color.
+- **Content goes *on* the glass**, not behind it (the shader can't refract DOM — see limits above).
+- **Match each element's `border-radius`** to its registered `radius` (the engine takes a
+  per-surface radius), or corners mismatch.
+- Glass is **visual — look, don't just read.** Verify rendering, don't assume.
 
-## How to verify changes (glass is visual — look, don't just read)
+## How to verify changes (render it)
 
 ```bash
-# serve the skill's live demo
-python3 -m http.server 8000 --directory plugins/glass-ui/skills/glass-ui/assets
-# open http://localhost:8000/example.html — check: backdrop visibly blurs (tier 1),
-# the refraction card bends the gradient (tier 2), text stays legible, rim highlight shows.
+# serve the playground
+python3 -m http.server 8000 --directory playground   # open http://localhost:8000
+
+# or capture a headless screenshot (renders WebGL via SwiftShader):
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
+  --use-gl=angle --use-angle=swiftshader --window-size=1440,900 --virtual-time-budget=5000 \
+  --screenshot=/tmp/glass.png "http://localhost:8000/index.html"
 ```
-Test in both a Chromium browser and Safari (tier-2 fallback) before claiming it works.
+Check: cards refract (bend) the background, edges are crisp with the rim, gloss sheen sits over
+content, panel/footer render as glass, text stays legible.
 
-## Distribution mechanics (for reference)
+## Reference material (outside this repo)
 
-- **npm/CDN**: `npm publish` the CSS; usable via jsDelivr/unpkg with no install.
-- **shadcn**: `shadcn build` compiles `registry.json` → `public/r/*.json`; users run
-  `npx shadcn add <site-url>/r/<item>.json`. "Publishing" = deploying the site.
-- **Claude plugin**: the repo *is* the marketplace (via `.claude-plugin/marketplace.json`);
-  users add it with `/plugin marketplace add <repo>`. No separate publish step.
-- **Skill marketplaces** (mcpmarket, lobehub, claudemarketplaces): these **index public
-  repos**; you don't push to them. Getting listed is a one-time submission / they auto-crawl.
-
-## Reference material (not part of the shipped repo)
-
-The competitive research and downloaded peer projects live OUTSIDE this repo at
-`../glass-ui/_reference/` with a comparison in `_reference/NOTES.md`. The original studied
-liquid-glass card is at `../glass-ui/bubbbly/`. Do not copy peer code into this repo; study
-and reimplement.
+Early research + downloaded peer projects live at `../glass-ui/_reference/` (`NOTES.md` has the
+competitive comparison); the original studied liquid-glass card is at `../glass-ui/bubbbly/`.
+Study and reimplement — do not copy peer code into this repo.
