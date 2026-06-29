@@ -53,6 +53,19 @@ sitting behind it (that would require rasterising the page every frame). For "fr
 over scrolling content," the browser's own `backdrop-filter` is the right tool; `glass-gl`
 is for glass over a media/background surface — hero sections, backdrops, draggable tiles.
 
+## Use it as an agent skill
+
+Coding agents (Claude Code, Cursor, Copilot CLI, …) can install a glass-gl skill that teaches
+them how to add the effect correctly:
+
+```bash
+npx skills add wiiiimm/glass-gl
+```
+
+The skill lives at [`skills/glass-gl/SKILL.md`](skills/glass-gl/SKILL.md) — the single,
+canonical "how to use glass-gl" reference (the one rule, API, params, live backgrounds,
+gotchas). It references the engine by npm/CDN, so there's no second copy to drift.
+
 ## Demo
 
 `playground/index.html` is an interactive playground (drag glass cards over a photo, tune

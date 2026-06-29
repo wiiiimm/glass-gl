@@ -67,6 +67,14 @@ browser's own `backdrop-filter: blur()` — it blurs real DOM behind it, live an
 just can't *refract*. Use `glass-gl` for glass **over a media background**: hero sections,
 photo/video backdrops, draggable tiles, showpieces.
 
+## Using an AI coding agent?
+
+Install the glass-gl skill so your agent knows how to wire it up correctly:
+
+```bash
+npx skills add wiiiimm/glass-gl
+```
+
 ## License
 
 MIT © wiiiimm · https://github.com/wiiiimm/glass-gl

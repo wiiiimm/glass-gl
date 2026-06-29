@@ -49,10 +49,15 @@ include `dispersion` (chromatic aberration) alongside `refraction`/`blur`/`edgeF
 ## Repository layout
 
 - `packages/glass-gl/` — the npm package: `glass-gl.js` (canonical engine), `package.json`, `README.md`.
-- `playground/` — interactive demo: `index.html`, `glass-gl.js` (symlink), `images/`.
+- `playground/` — interactive demo: `index.html`, `glass-gl.js` (symlink), `images/`. **Wired to a
+  Vercel deployment — don't restructure this directory.**
+- `skills/glass-gl/SKILL.md` — the distributable agent skill (installable via `npx skills add
+  wiiiimm/glass-gl`). **Canonical agent-facing usage doc** — when the library's API/usage changes,
+  update `SKILL.md` (don't re-document it in a new place). It references the engine by npm/CDN, never
+  a copy — no engine duplication.
 - `.github/workflows/publish.yml` — manual-trigger npm publish + GitHub Release.
-- `.claude/skills/` — installed release/commit skills (reference only — see Release workflow).
-- `docs/` — screenshots used in the README.
+- `.claude/skills/` — installed release/commit skills (local dev reference only — NOT distributed).
+- `docs/` — screenshots used in the READMEs.
 - `AGENTS.md` / `CLAUDE.md` (symlink), `README.md`, `LICENSE`.
 
 ## Release & commit workflow
