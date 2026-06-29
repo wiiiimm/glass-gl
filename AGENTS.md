@@ -23,7 +23,12 @@ The repo ships:
   You can't get this refraction with CSS alone — CSS can only blur (`backdrop-filter`).
 - **It bends a *background*, not the *page*.** The shader only samples the background texture you
   give it (image / canvas / video / gradient). It **cannot** refract arbitrary live DOM behind it
-  (e.g. a `<p>`). Put content *on* the glass; give the glass a media background to refract.
+  (e.g. a `<p>`). Put content *on* the glass; give the glass a media background to refract. To
+  refract text/graphics, **bake them into the background canvas** (that's what the playground does
+  with the `glass-gl` wordmark). A `<canvas>`/`<video>` background is **live** — re-uploaded every
+  frame — so Ken Burns slideshows and playing video refract in real time.
+- **Chromatic aberration** (`dispersion` param) splits R/B at the lens rim, so white edges fringe
+  into colour like real glass — strongest near the edge, off (`0`) by default in the library.
 - For "frosted panel over live scrolling content", CSS `backdrop-filter` is the right tool — not
   this. `glass-gl` is for glass over a media background: heroes, photo/video backdrops, tiles.
 - **Resource note:** the engine runs a continuous `requestAnimationFrame` loop (GPU stays awake).
@@ -36,7 +41,9 @@ The repo ships:
 copy. npm still ships the real file; the demo follows the symlink, so they can't diverge.
 
 Public API: `createGlass({ canvas, background })` → `register(el, { radius })` / `unregister` /
-`clear` / `setParams({...})` / `setBackground(src)` / `destroy()`.
+`clear` / `setParams({...})` / `setBackground(src)` / `destroy()`. `setBackground` takes a URL
+string, `<img>`, `<canvas>`, or `<video>` (canvas/video = live, refreshed each frame). Params
+include `dispersion` (chromatic aberration) alongside `refraction`/`blur`/`edgeFrost`/etc.
 
 ## Repository layout
 

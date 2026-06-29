@@ -1,6 +1,6 @@
 {
   "name": "glass-gl",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Real WebGL liquid glass for the web — any element refracts the background like a glass lens (not just backdrop-filter blur).",
   "type": "module",
   "main": "./glass-gl.js",

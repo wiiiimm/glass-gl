@@ -17,6 +17,11 @@ elements you want to be glass. The engine runs one fullscreen WebGL canvas behin
 page and draws a refracting lens at each registered element's position every frame — so
 the glass tracks elements as they move, drag, or resize.
 
+A `<canvas>` or `<video>` background is treated as **live** — re-uploaded every frame — so
+animated backgrounds (a playing video, a Ken Burns slideshow, anything you paint into a
+canvas) refract in real time. Want the glass to bend *text or graphics*? Draw them into
+that background canvas (the lens only refracts the background layer — see the rule below).
+
 ```js
 import { createGlass } from "glass-gl";
 
@@ -29,12 +34,14 @@ glass.setParams({
   liquidness: 0.0,           // milky-white mix
   edgeLight: 1.0,            // top sheen
   edgeFrost: 0.22,           // rim border
+  dispersion: 0.2,           // chromatic aberration at the edge (white → RGB fringe)
   radius: 30,                // match the element's border-radius
   tint: [1, 1, 1],           // glass colour
 });
 
 glass.unregister(el);
-glass.setBackground("/other.jpg");
+glass.setBackground("/other.jpg");   // string / <img> = static
+glass.setBackground(videoEl);        // <video> or <canvas> = LIVE, refracted every frame
 glass.destroy();
 ```
 

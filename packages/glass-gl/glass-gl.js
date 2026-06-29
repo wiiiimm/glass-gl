@@ -1,9 +1,12 @@
 /* glass-gl.js — reusable WebGL "liquid glass" engine (framework-agnostic).
  *
- * One fullscreen canvas refracts a BACKGROUND layer (image / canvas / gradient).
+ * One fullscreen canvas refracts a BACKGROUND layer (image / canvas / video).
+ * A canvas or video background is treated as "live" — re-uploaded every frame —
+ * so animated backgrounds (Ken Burns, playing video) refract in real time.
  * Any DOM element you register() becomes a refracting glass surface: the engine
  * reads its screen rect every frame and draws the lens (rounded-rect mask →
- * magnification → blur → edge light/frost) at that spot. Your content sits on top.
+ * magnification → blur → chromatic edge → edge light/frost) at that spot. Your
+ * content sits on top. To refract text/graphics, bake them into the background.
  *
  *   const glass = createGlass({ canvas, background: '/bg.jpg' });
  *   glass.register(el);
@@ -28,6 +31,7 @@ const FRAG = `
   uniform float uWhite;    // liquidness (mix toward tint)
   uniform float uEdge;     // edge-light strength
   uniform float uFrost;    // edge frost: rim width + brightness (0..1)
+  uniform float uDisperse; // chromatic aberration: R/G/B split at the lens edge (0..1)
   uniform float uRad[MAX]; // per-surface corner radius (px) — match each element's border-radius
   uniform vec3  uTint;     // milk colour
   uniform sampler2D iChannel0;
@@ -78,6 +82,16 @@ const FRAG = `
       }
       acc /= total;
 
+      // chromatic aberration — split R/B along the radial direction by a small
+      // FIXED offset (independent of surface size), edge-weighted (lensField^2)
+      // so only the rim fringes. White edges break into colour, like real glass.
+      if (uDisperse > 0.0) {
+        vec2 dir = normalize(uv - cuv + vec2(1e-5));
+        vec2 disp = dir * uDisperse * lensField * lensField * 0.010;
+        acc.r = texture2D(iChannel0, coverUv(lens + disp)).r;
+        acc.b = texture2D(iChannel0, coverUv(lens - disp)).b;
+      }
+
       float dy = clamp(uv.y - cuv.y, 0.0, 0.2);
       float grad = (dy + 0.05) * 0.6;
       vec4 lighting = clamp(acc + vec4(grad) * uEdge + vec4(rim) * (0.12 + uFrost * 0.6), 0.0, 1.0);
@@ -96,6 +110,7 @@ const DEFAULT_PARAMS = {
   liquidness: 0.0,  // 0..~0.6, mix toward tint
   edgeLight: 1.0,   // top sheen
   edgeFrost: 0.22,  // rim band 0..1
+  dispersion: 0.0,  // chromatic aberration at the edge (0..1)
   radius: 30,       // px — keep in sync with the element's border-radius
   tint: [1, 1, 1],  // milk colour (white = light glass)
 };
@@ -108,6 +123,7 @@ export function createGlass({ canvas, background, params } = {}) {
   const P = { ...DEFAULT_PARAMS, ...(params || {}) };
   const surfaces = new Map();          // registered element -> opts ({ radius? })
   let imgW = 1600, imgH = 1000;
+  let liveSource = null;               // canvas/video → re-uploaded every frame
   let raf = 0, alive = true;
 
   /* ---- program ---- */
@@ -132,7 +148,7 @@ export function createGlass({ canvas, background, params } = {}) {
 
   const U = {};
   ["iResolution","uImgRes","uPos","uHalf","uCount","uBlur","uLens","uWhite",
-   "uEdge","uFrost","uRad","uTint","iChannel0"].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+   "uEdge","uFrost","uDisperse","uRad","uTint","iChannel0"].forEach(n => U[n] = gl.getUniformLocation(prog, n));
 
   /* ---- background texture ---- */
   const tex = gl.createTexture();
@@ -159,6 +175,7 @@ export function createGlass({ canvas, background, params } = {}) {
     uploadTexture(c, 1600, 1000);
   }
   function setBackground(src) {
+    liveSource = null;                 // reset; a live source re-arms it below
     if (!src) return proceduralBackground();
     if (typeof src === "string") {
       const im = new Image(); im.crossOrigin = "anonymous";
@@ -169,7 +186,13 @@ export function createGlass({ canvas, background, params } = {}) {
       if (src.complete && src.naturalWidth) uploadTexture(src, src.naturalWidth, src.naturalHeight);
       else { src.onload = () => uploadTexture(src, src.naturalWidth, src.naturalHeight); }
     } else if (src instanceof HTMLCanvasElement) {
+      liveSource = src;                // canvas content changes → refresh each frame
       uploadTexture(src, src.width, src.height);
+    } else if (src instanceof HTMLVideoElement) {
+      liveSource = src;                // playing video → refresh each frame
+      const up = () => uploadTexture(src, src.videoWidth, src.videoHeight);
+      if (src.readyState >= 2) up();
+      else src.addEventListener("loadeddata", up, { once: true });
     }
   }
   proceduralBackground();          // instant fill, replaced when the real bg loads
@@ -190,6 +213,17 @@ export function createGlass({ canvas, background, params } = {}) {
   const radArr = new Float32Array(MAX);
   function frame() {
     if (!alive) return;
+
+    // live background (canvas / video): pull a fresh frame into the texture
+    if (liveSource) {
+      const isVid = (typeof HTMLVideoElement !== "undefined") && liveSource instanceof HTMLVideoElement;
+      if (!isVid || liveSource.readyState >= 2) {
+        const lw = liveSource.videoWidth || liveSource.width;
+        const lh = liveSource.videoHeight || liveSource.height;
+        if (lw && lh) { try { uploadTexture(liveSource, lw, lh); } catch (e) {} }
+      }
+    }
+
     let n = 0;
     surfaces.forEach((opts, el) => {
       if (n >= MAX) return;
@@ -213,6 +247,7 @@ export function createGlass({ canvas, background, params } = {}) {
     gl.uniform1f(U.uWhite, P.liquidness);
     gl.uniform1f(U.uEdge, P.edgeLight);
     gl.uniform1f(U.uFrost, P.edgeFrost);
+    gl.uniform1f(U.uDisperse, P.dispersion);
     gl.uniform1fv(U.uRad, radArr);
     gl.uniform3f(U.uTint, P.tint[0], P.tint[1], P.tint[2]);
     gl.activeTexture(gl.TEXTURE0);
