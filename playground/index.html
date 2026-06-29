@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Glass UI — Playground (WebGL liquid glass)</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #fff; background: #0a0c16;
+    -webkit-user-select: none; user-select: none;
+  }
+  img.hidden-src { display: none; }
+
+  /* fullscreen WebGL canvas: renders the background + refracting glass for
+     every draggable object. Sits behind all DOM. */
+  /* size set in JS to window.innerWidth/innerHeight (NOT 100vw/100vh) so the
+     canvas display box matches its drawing buffer + the cards' client rects.
+     On iOS Safari 100vh != innerHeight, which would offset the WebGL glass. */
+  #gl { position: fixed; top: 0; left: 0; display: block; z-index: 0; }
+
+  .canvas { position: fixed; inset: 0; z-index: 1; }
+
+  /* =========================================================================
+     DRAGGABLE OBJECTS — transparent DOM frames. The GLASS is drawn by the
+     WebGL shader behind them (real refraction). Only content + a crisp rim
+     live in the DOM, sitting on top of the refracted glass.
+     ========================================================================= */
+  .shape {
+    position: absolute; z-index: 5;
+    touch-action: none; cursor: grab;
+    border-radius: var(--radius, 30px);
+    border: 1px solid rgb(255 255 255 / var(--border, .45));
+    box-shadow: 0 24px 60px rgb(0 0 0 / var(--shadow, .35));
+    transition: box-shadow .15s ease;
+    will-change: left, top;
+  }
+  .shape.dragging { cursor: grabbing; box-shadow: 0 44px 100px rgb(0 0 0 / .5); }
+  .shape.dark { color: #0c1020; --border: .25; }
+
+  .tile { width: 230px; padding: 15px; }
+  .tile .photo {
+    width: 100%; aspect-ratio: 1 / 1; border-radius: 18px; overflow: hidden;
+    pointer-events: none; box-shadow: 0 8px 22px rgb(0 0 0 / .28);
+  }
+  .tile .photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tile .cap { margin: 11px 4px 2px; font-size: 14px; font-weight: 800; }
+  .tile .sub { margin: 0 4px; font-size: 12px; font-weight: 600; opacity: .85; }
+
+  .doc { width: 300px; padding: 22px 24px; }
+  .doc h3 { margin: 0 0 8px; font-size: 16px; font-weight: 800; }
+  .doc p  { margin: 0; font-size: 13px; line-height: 1.55; font-weight: 600; opacity: .96; }
+  .doc code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+    background: rgb(0 0 0 / .3); padding: 1px 6px; border-radius: 6px;
+  }
+  .doc .pill {
+    display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .5px;
+    padding: 3px 11px; border-radius: 999px; border: 1px solid currentColor;
+    opacity: .85; margin-bottom: 11px;
+  }
+
+  /* =========================================================================
+     CONTROL PANEL — pinned. Stays CSS glass (backdrop-filter frosts the WebGL
+     canvas behind it), so the page shows BOTH techniques side by side.
+     ========================================================================= */
+  .panel, .hint {
+    background: rgb(255 255 255 / .12);
+    -webkit-backdrop-filter: blur(22px) saturate(1.3);
+    backdrop-filter: blur(22px) saturate(1.3);
+    border: 1px solid rgb(255 255 255 / .3);
+    box-shadow: 0 24px 60px rgb(0 0 0 / .28), inset 0 1px 0 rgb(255 255 255 / .4);
+  }
+  .panel {
+    position: fixed; top: 18px; right: 18px; z-index: 50;
+    width: 292px; max-height: calc(100vh - 36px); overflow-y: auto;
+    padding: 18px 18px 15px; border-radius: 22px;
+  }
+  .panel h1 { margin: 0 0 1px; font-size: 17px; font-weight: 800; }
+  .panel .tag { margin: 0 0 6px; font-size: 12px; font-weight: 600; opacity: .8; }
+  .panel .sec { margin: 13px 0 7px; font-size: 11px; font-weight: 800; letter-spacing: .6px; opacity: .6; text-transform: uppercase; }
+  .ctrl { margin-bottom: 12px; }
+  .ctrl .row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+  .ctrl label { font-size: 12.5px; font-weight: 700; }
+  .ctrl .val { font-size: 12px; font-weight: 700; opacity: .85; font-variant-numeric: tabular-nums; }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 18px;
+    background: transparent; cursor: pointer; margin: 0;
+  }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; background: rgb(255 255 255 / .45); }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; margin-top: -6px; box-shadow: 0 2px 8px rgb(0 0 0 / .35);
+  }
+  input[type=range]::-moz-range-track { height: 4px; border-radius: 999px; background: rgb(255 255 255 / .45); }
+  input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 50%; background: #fff; }
+
+  .toggles { display: flex; gap: 8px; margin: 4px 0 6px; }
+  .toggle {
+    flex: 1; text-align: center; font-size: 12.5px; font-weight: 700;
+    padding: 9px 0; border-radius: 12px; cursor: pointer;
+    border: 1px solid rgb(255 255 255 / .35); background: rgb(255 255 255 / .07);
+    color: #fff; font-family: inherit; transition: background .15s ease;
+  }
+  .toggle:hover { background: rgb(255 255 255 / .16); }
+  .toggle.on { background: #fff; color: #12233b; border-color: #fff; }
+
+  .actions { display: flex; gap: 8px; margin-top: 10px; }
+  .btn {
+    flex: 1; height: 40px; border-radius: 12px; border: 0; cursor: pointer;
+    font-family: inherit; font-size: 13px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .btn.primary { background: #fff; color: #12233b; }
+  .btn.ghost { background: rgb(255 255 255 / .1); color: #fff; border: 1px solid rgb(255 255 255 / .35); }
+  .btn:active { transform: translateY(1px); }
+
+  .hint {
+    position: fixed; left: 18px; bottom: 16px; z-index: 50;
+    padding: 9px 14px; border-radius: 12px; font-size: 12px; font-weight: 600; opacity: .92;
+  }
+  .hint b { font-weight: 800; }
+</style>
+</head>
+<body>
+  <img id="srcImage" class="hidden-src" crossorigin="anonymous" alt="" />
+  <canvas id="gl"></canvas>
+
+  <div class="canvas" id="canvas">
+    <!-- draggable glass objects injected by script -->
+
+    <aside class="panel">
+      <h1>Liquid glass</h1>
+      <p class="tag">WebGL refraction · drag any object</p>
+
+      <div class="toggles" style="margin-bottom:4px">
+        <button class="toggle" data-preset="clear">Clear</button>
+        <button class="toggle" data-preset="frosted">Frosted</button>
+        <button class="toggle" data-preset="liquid">Liquid</button>
+      </div>
+
+      <div class="sec">Glass (shader)</div>
+      <div class="ctrl"><div class="row"><label>Blur</label><span class="val" id="v-blur"></span></div>
+        <input type="range" id="s-blur" min="0" max="30" step="1"></div>
+      <div class="ctrl"><div class="row"><label>Refraction</label><span class="val" id="v-lens"></span></div>
+        <input type="range" id="s-lens" min="0" max="50" step="1"></div>
+      <div class="ctrl"><div class="row"><label>Liquidness</label><span class="val" id="v-white"></span></div>
+        <input type="range" id="s-white" min="0" max="70" step="1"></div>
+      <div class="ctrl"><div class="row"><label>Edge light</label><span class="val" id="v-edge"></span></div>
+        <input type="range" id="s-edge" min="0" max="200" step="5"></div>
+      <div class="ctrl"><div class="row"><label>Edge frost <span style="opacity:.6">(rim border)</span></label><span class="val" id="v-frost"></span></div>
+        <input type="range" id="s-frost" min="0" max="100" step="2"></div>
+      <div class="ctrl"><div class="row"><label>Corner radius <span style="opacity:.6">(glass + frame)</span></label><span class="val" id="v-radius"></span></div>
+        <input type="range" id="s-radius" min="8" max="54" step="1"></div>
+
+      <div class="sec">Frame (DOM)</div>
+      <div class="ctrl"><div class="row"><label>Border</label><span class="val" id="v-border"></span></div>
+        <input type="range" id="s-border" min="0" max="100" step="2"></div>
+      <div class="ctrl"><div class="row"><label>Shadow</label><span class="val" id="v-shadow"></span></div>
+        <input type="range" id="s-shadow" min="0" max="60" step="2"></div>
+
+      <div class="toggles">
+        <button class="toggle on" id="t-light">Light glass</button>
+        <button class="toggle" id="t-dark">Dark glass</button>
+      </div>
+
+      <div class="actions">
+        <button class="btn primary" id="add">+ Add tile</button>
+        <button class="btn ghost" id="reset">Reset</button>
+      </div>
+    </aside>
+
+    <p class="hint">Built with the <b>glass-ui</b> skill · the panel is CSS glass · the cards are <b>WebGL</b> glass</p>
+  </div>
+
+  <script type="module">
+  import { createGlass } from "./glass-gl.js";
+
+  /* ===================== set up the liquid-glass engine =====================
+     The entire WebGL renderer now lives in glass-core.js (the library). Here we
+     just point it at a background to refract, then register the elements we want
+     to BE glass. This file is now a *consumer* of the library. */
+  const canvasEl = document.getElementById("gl");
+  const scene = document.getElementById("canvas");
+  const glass = createGlass({ canvas: canvasEl, background: "images/bg.jpg" });
+
+  /* ===================== glass params ===================== */
+  const DEFAULTS = { blur:12, lens:22, white:0, edge:100, frost:22, border:45, radius:30, shadow:35, tint:"light" };
+  const P = { ...DEFAULTS, tintRGB:[1,1,1] };
+
+  /* ===================== draggable objects ===================== */
+  const TILES = [
+    { img:"images/pic-1.svg", cap:"Liquid glass",   sub:"WebGL refraction", x:60,  y:90  },
+    { img:"images/pic-2.svg", cap:"Over a photo",   sub:"the bg bends through", x:330, y:430 },
+    { img:"images/pic-3.svg", cap:"Drag me around", sub:"glass tracks the card", x:150, y:470 },
+  ];
+  const DOCS = [
+    { pill:"THE RECIPE", h:"Glass that refracts", x:470, y:120,
+      p:`The card has <b>no background</b> — the shader behind it samples the photo, <b>bends</b> it through a squircle lens, blurs it, and lights the top edge.` },
+    { pill:"3 TIERS", h:"This is tier 3", x:720, y:430,
+      p:`Tier 1 = CSS <code>blur()</code> (the panel). Tier 2 = SVG displacement. Tier 3 = this WebGL lens — the richest, and what the original used.` },
+  ];
+
+  let zTop = 10;
+  function make(html, cls, x, y) {
+    const el = document.createElement("div");
+    el.className = `shape ${cls}`;
+    el.style.left = x + "px"; el.style.top = y + "px";
+    el.innerHTML = html; scene.appendChild(el);
+    glass.register(el);            // <-- this element is now liquid glass
+    return el;
+  }
+  const tileHTML = t => `<div class="photo"><img src="${t.img}" alt="" draggable="false"></div>
+      <div class="cap">${t.cap}</div><div class="sub">${t.sub}</div>`;
+  const docHTML = d => `<span class="pill">${d.pill}</span><h3>${d.h}</h3><p>${d.p}</p>`;
+  function buildScene() {
+    scene.querySelectorAll(".shape").forEach(s => s.remove());
+    glass.clear();                 // drop stale element refs before re-registering
+    TILES.forEach(t => make(tileHTML(t), "tile", t.x, t.y));
+    DOCS.forEach(d => make(docHTML(d), "doc", d.x, d.y));
+    applyDOM();
+  }
+
+  /* ===================== dragging ===================== */
+  let drag = null;
+  scene.addEventListener("pointerdown", (e) => {
+    const s = e.target.closest(".shape"); if (!s) return;
+    s.style.zIndex = ++zTop; s.classList.add("dragging");
+    s.setPointerCapture(e.pointerId);
+    drag = { s, dx: e.clientX - s.offsetLeft, dy: e.clientY - s.offsetTop };
+  });
+  scene.addEventListener("pointermove", (e) => {
+    if (!drag) return; const { s } = drag;
+    const mx = innerWidth - s.offsetWidth - 4, my = innerHeight - s.offsetHeight - 4;
+    s.style.left = Math.min(Math.max(e.clientX - drag.dx, 4), mx) + "px";
+    s.style.top  = Math.min(Math.max(e.clientY - drag.dy, 4), my) + "px";
+  });
+  const endDrag = () => { if (drag) { drag.s.classList.remove("dragging"); drag = null; } };
+  scene.addEventListener("pointerup", endDrag);
+  scene.addEventListener("pointercancel", endDrag);
+
+  /* ===================== controls ===================== */
+  const $ = id => document.getElementById(id);
+  const C = {
+    blur:  { el:$("s-blur"),  out:$("v-blur"),  fmt:v=>v+"px" },
+    lens:  { el:$("s-lens"),  out:$("v-lens"),  fmt:v=>(v/100).toFixed(2) },
+    white: { el:$("s-white"), out:$("v-white"), fmt:v=>v==0?"off":(v/100).toFixed(2) },
+    edge:  { el:$("s-edge"),  out:$("v-edge"),  fmt:v=>(v/100).toFixed(2)+"×" },
+    frost: { el:$("s-frost"), out:$("v-frost"), fmt:v=>v==0?"off":(v/100).toFixed(2) },
+    border:{ el:$("s-border"),out:$("v-border"),fmt:v=>(v/100).toFixed(2) },
+    radius:{ el:$("s-radius"),out:$("v-radius"),fmt:v=>v+"px" },
+    shadow:{ el:$("s-shadow"),out:$("v-shadow"),fmt:v=>(v/100).toFixed(2) },
+  };
+  function applyDOM() {
+    document.querySelectorAll(".shape").forEach(s => {
+      s.style.setProperty("--border", P.border/100);
+      s.style.setProperty("--radius", P.radius + "px");
+      s.style.setProperty("--shadow", P.shadow/100);
+    });
+  }
+  function readSlider(key) {
+    const c = C[key]; P[key] = +c.el.value; c.out.textContent = c.fmt(+c.el.value);
+  }
+  Object.keys(C).forEach(key => {
+    C[key].el.addEventListener("input", () => {
+      readSlider(key);
+      if (key === "border" || key === "radius" || key === "shadow") applyDOM();
+      pushParams();
+    });
+  });
+
+  function setTint(mode) {
+    P.tint = mode;
+    P.tintRGB = mode === "dark" ? [0.04,0.05,0.09] : [1,1,1];
+    $("t-light").classList.toggle("on", mode === "light");
+    $("t-dark").classList.toggle("on", mode === "dark");
+    document.querySelectorAll(".shape").forEach(s => s.classList.toggle("dark", mode === "dark"));
+    pushParams();
+  }
+  $("t-light").onclick = () => setTint("light");
+  $("t-dark").onclick = () => setTint("dark");
+
+  let addN = 0;
+  $("add").onclick = () => {
+    const imgs = ["images/pic-1.svg","images/pic-2.svg","images/pic-3.svg","images/pic-4.svg","images/avatar.png"];
+    const t = { img: imgs[addN % imgs.length], cap:"New glass tile", sub:"#" + (addN+1) };
+    const x = 90 + (addN*43) % Math.max(140, innerWidth - 700);
+    const y = 90 + (addN*61) % Math.max(140, innerHeight - 360);
+    const el = make(tileHTML(t), "tile", x, y); addN++;
+    el.style.zIndex = ++zTop;
+    if (P.tint === "dark") el.classList.add("dark");
+    applyDOM();
+  };
+
+  /* presets — "Clear" = crystal-clear see-through glass (no blur, no milk,
+     light refraction); "Frosted" = heavy blur; "Liquid" = strong lens. */
+  const PRESETS = {
+    clear:   { blur:0,  lens:16, white:0,  edge:40,  frost:0  },
+    frosted: { blur:22, lens:6,  white:14, edge:90,  frost:70 },
+    liquid:  { blur:10, lens:32, white:16, edge:140, frost:30 },
+  };
+  function applyPreset(name) {
+    const pre = PRESETS[name]; if (!pre) return;
+    Object.assign(P, pre);
+    ["blur","lens","white","edge","frost"].forEach(k => { C[k].el.value = P[k]; readSlider(k); });
+    pushParams();
+    document.querySelectorAll("[data-preset]").forEach(b =>
+      b.classList.toggle("on", b.dataset.preset === name));
+  }
+  document.querySelectorAll("[data-preset]").forEach(b =>
+    b.onclick = () => applyPreset(b.dataset.preset));
+
+  /* push the panel's values into the engine (slider units → engine params). */
+  function pushParams() {
+    glass.setParams({
+      blur:       P.blur / 10,
+      refraction: P.lens / 100,
+      liquidness: P.white / 100,
+      edgeLight:  P.edge / 100,
+      edgeFrost:  P.frost / 100,
+      radius:     P.radius,
+      tint:       P.tintRGB,
+    });
+  }
+
+  function resetAll() {
+    Object.assign(P, DEFAULTS);
+    Object.keys(C).forEach(key => { C[key].el.value = P[key]; readSlider(key); });
+    setTint(DEFAULTS.tint);
+    pushParams();
+    buildScene();
+  }
+  $("reset").onclick = resetAll;
+
+  /* init — glass-gl owns the render loop + resize; we just drive params + shapes */
+  resetAll();
+  </script>
+</body>
+</html>
