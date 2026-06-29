@@ -368,6 +368,10 @@
         nextIdx = (curIdx + 1) % SLIDES.length; fading = true; fadeStart = now; updateDock();
       }
     }
+    // dark overlay over the photo — lifts contrast so the glass + baked text read
+    // clearly on any image. Sits under the text (drawn next), over the photo.
+    sx.fillStyle = "rgba(8, 10, 18, 0.34)";
+    sx.fillRect(0, 0, stageW, stageH);
     drawText();
   }
   renderStage(performance.now());
