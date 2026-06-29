@@ -70,7 +70,8 @@
   /* glass-gl wordmark — a glass logo plaque (itself a registered WebGL-glass surface) */
   .shape.wordmark { padding: 16px 32px; }
   .shape.wordmark .wm {
-    font-size: clamp(34px, 4.6vw, 56px); font-weight: 800; letter-spacing: -1.5px;
+    font-family: ui-serif, "New York", Georgia, "Times New Roman", serif;
+    font-size: clamp(36px, 4.8vw, 58px); font-weight: 700; letter-spacing: 0;
     line-height: 1; white-space: nowrap;
     background: linear-gradient(180deg, #ffffff 0%, #e3ecff 60%, #c4d4ff 100%);
     -webkit-background-clip: text; background-clip: text; color: transparent;
@@ -85,6 +86,12 @@
   .tile .photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .tile .cap { margin: 11px 4px 2px; font-size: 14px; font-weight: 800; }
   .tile .sub { margin: 0 4px; font-size: 12px; font-weight: 600; opacity: .85; }
+  /* drag-handle affordance — grip dots, top-right of each tile */
+  .tile .grip {
+    position: absolute; top: 9px; right: 9px; width: 17px; height: 17px;
+    color: #fff; opacity: .65; pointer-events: none;
+    filter: drop-shadow(0 1px 2px rgb(0 0 0 / .45));
+  }
 
   .doc { width: 300px; padding: 22px 24px; }
   .doc h3 { margin: 0 0 8px; font-size: 16px; font-weight: 800; }
@@ -238,14 +245,14 @@
 
   /* ===================== draggable objects ===================== */
   const TILES = [
-    { img:"images/pic-1.svg", cap:"Liquid glass",   sub:"WebGL refraction", x:60,  y:90  },
-    { img:"images/pic-2.svg", cap:"Over a photo",   sub:"the bg bends through", x:330, y:430 },
-    { img:"images/pic-3.svg", cap:"Drag me around", sub:"glass tracks the card", x:150, y:470 },
+    { img:"images/pic-1.svg", cap:"Liquid glass",   sub:"WebGL refraction", x:60,  y:80  },
+    { img:"images/pic-2.svg", cap:"Over a photo",   sub:"the bg bends through", x:300, y:610 },
+    { img:"images/pic-3.svg", cap:"Drag me around", sub:"glass tracks the card", x:60,  y:560 },
   ];
   const DOCS = [
-    { pill:"THE RECIPE", h:"Glass that refracts", x:470, y:120,
+    { pill:"THE RECIPE", h:"Glass that refracts", x:440, y:90,
       p:`The card has <b>no background</b> — the shader behind it samples the photo, <b>bends</b> it through a squircle lens, blurs it, and lights the top edge.` },
-    { pill:"3 TIERS", h:"This is tier 3", x:720, y:430,
+    { pill:"3 TIERS", h:"This is tier 3", x:820, y:560,
       p:`Tier 1 = CSS <code>blur()</code> (the panel). Tier 2 = SVG displacement. Tier 3 = this WebGL lens — the richest, and what the original used.` },
   ];
 
@@ -258,7 +265,10 @@
     glass.register(el);            // <-- this element is now liquid glass
     return el;
   }
-  const tileHTML = t => `<div class="photo"><img src="${t.img}" alt="" draggable="false"></div>
+  const tileHTML = t => `<svg class="grip" viewBox="0 0 16 16" aria-hidden="true"><g fill="currentColor">
+        <circle cx="6" cy="4" r="1.3"/><circle cx="10" cy="4" r="1.3"/><circle cx="6" cy="8" r="1.3"/>
+        <circle cx="10" cy="8" r="1.3"/><circle cx="6" cy="12" r="1.3"/><circle cx="10" cy="12" r="1.3"/></g></svg>
+      <div class="photo"><img src="${t.img}" alt="" draggable="false"></div>
       <div class="cap">${t.cap}</div><div class="sub">${t.sub}</div>`;
   const docHTML = d => `<span class="pill">${d.pill}</span><h3>${d.h}</h3><p>${d.p}</p>`;
   function buildScene() {
@@ -266,8 +276,9 @@
     glass.clear();                 // drop stale element refs before re-registering
     TILES.forEach(t => make(tileHTML(t), "tile", t.x, t.y));
     DOCS.forEach(d => make(docHTML(d), "doc", d.x, d.y));
-    const wm = make('<span class="wm">glass-gl</span>', "wordmark", 0, 30);
-    wm.style.left = Math.round((innerWidth - wm.offsetWidth) / 2) + "px";   // centre horizontally
+    const wm = make('<span class="wm">glass-gl</span>', "wordmark", 0, 0);
+    wm.style.left = Math.round((innerWidth - wm.offsetWidth) / 2) + "px";   // centre on the canvas
+    wm.style.top  = Math.round((innerHeight - wm.offsetHeight) / 2) + "px";
     applyDOM();
     applyGloss();
     // the UI chrome is WebGL glass too — register with their own corner radii
