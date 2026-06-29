@@ -3,6 +3,24 @@
 Guidance for AI coding agents (Claude Code, Cursor, Codex, etc.) working in this repo.
 `CLAUDE.md` is a symlink to this file — keep all agent guidance here.
 
+## Release & commit workflow (see `.claude/skills/`)
+
+This repo uses Conventional Commits + semantic-release, with **pooled releases** and a
+**`production` branch** gate. Installed skills carry the details — load them when relevant:
+
+- **conventional-commits** — every commit/PR title is `type(scope): description`
+  (`feat`/`fix`/… ; `feat!` or a `BREAKING CHANGE:` footer for majors). This is what drives
+  automated version bumps and the changelog, so non-conventional commits break releases.
+- **semantic-release-automation** — versioning, CHANGELOG, tags, GitHub Releases, and npm
+  publish are automated from those commits (package: `packages/glass-gl`).
+- **pooled-release** — we do NOT release on every merge to `main`. Releases are **pooled**
+  (cut on demand / on a cadence) so each release has one readable changelog.
+- **production-release-gating** — `main` is development; the **`production` branch** is the
+  promotion gate (only a real release/promotion ships prod, not every commit).
+
+Practical rule: commit to `main` with conventional messages; cut a pooled release when ready;
+promote to `production` to ship. Don't wire "publish on every push to main."
+
 ## What this project is
 
 A **glass UI toolkit** distributed through several channels at once, from a single repo:
