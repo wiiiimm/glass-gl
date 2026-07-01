@@ -24,19 +24,21 @@ const glass = createGlass({ canvas, background: "/bg.jpg" });
 
 glass.register(el);          // any element becomes liquid glass
 glass.setParams({
-  refraction: 0.22,
-  blur: 1.2,
-  liquidness: 0.0,
-  edgeLight: 1.0,
-  edgeFrost: 0.22,
-  gloss: 0.3,
-  glossSize: 0.5,
+  refraction: 0.22,          // lens strength
+  blur: 1.2,                 // frost
+  liquidness: 0.0,           // milky mix toward tint
+  edgeLight: 1.0,            // directional rim glint strength
+  edgeFrost: 0.22,           // frosted rim band
+  dispersion: 0.2,           // chromatic aberration at the rim
+  saturation: 1.25,          // vibrancy of the refracted backdrop
+  curve: 2.8,                // lens profile: 1 linear → ~3 droplet
+  lightAngle: 35,            // rim-glint light direction (deg, 0 = top)
   radius: 30,                // match the element's border-radius
   tint: [1, 1, 1],
 });
 
 glass.unregister(el);
-glass.setBackground("/other.jpg");
+glass.setBackground("/other.jpg");   // string / <img> = static; <canvas> / <video> = live
 glass.destroy();
 ```
 

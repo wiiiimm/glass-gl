@@ -35,6 +35,9 @@ glass.setParams({
   edgeLight: 1.0,            // top sheen
   edgeFrost: 0.22,           // rim border
   dispersion: 0.2,           // chromatic aberration at the edge (white → RGB fringe)
+  saturation: 1.25,          // vibrancy — saturate the refracted backdrop
+  curve: 2.8,                // lens profile: 1 linear → ~3 droplet (flat centre, steep rim)
+  lightAngle: 35,            // where the rim glint comes from (deg, 0 = top)
   radius: 30,                // match the element's border-radius
   tint: [1, 1, 1],           // glass colour
 });

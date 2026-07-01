@@ -244,11 +244,15 @@
         <input type="range" id="s-frost" min="0" max="100" step="2"></div>
       <div class="ctrl"><div class="row"><label>Chromatic <span style="opacity:.6">(edge dispersion)</span></label><span class="val" id="v-disperse"></span></div>
         <input type="range" id="s-disperse" min="0" max="100" step="2"></div>
+      <div class="ctrl"><div class="row"><label>Vibrance <span style="opacity:.6">(backdrop saturation)</span></label><span class="val" id="v-vib"></span></div>
+        <input type="range" id="s-vib" min="80" max="170" step="5"></div>
+      <div class="ctrl"><div class="row"><label>Lens profile <span style="opacity:.6">(1 flat → 4 droplet)</span></label><span class="val" id="v-curve"></span></div>
+        <input type="range" id="s-curve" min="10" max="40" step="1"></div>
       <div class="ctrl"><div class="row"><label>Gloss <span style="opacity:.6">(reflective top)</span></label><span class="val" id="v-gloss"></span></div>
         <input type="range" id="s-gloss" min="0" max="100" step="2"></div>
       <div class="ctrl"><div class="row"><label>Gloss size</label><span class="val" id="v-glosssize"></span></div>
         <input type="range" id="s-glosssize" min="0" max="100" step="2"></div>
-      <div class="ctrl"><div class="row"><label>Gloss angle</label><span class="val" id="v-glossangle"></span></div>
+      <div class="ctrl"><div class="row"><label>Light angle <span style="opacity:.6">(gloss + rim glint)</span></label><span class="val" id="v-glossangle"></span></div>
         <div class="dial" id="glossDial"><div class="dial-handle"></div></div></div>
       <div class="ctrl"><div class="row"><label>Corner radius <span style="opacity:.6">(glass + frame)</span></label><span class="val" id="v-radius"></span></div>
         <input type="range" id="s-radius" min="8" max="54" step="1"></div>
@@ -408,7 +412,7 @@
   }
 
   /* ===================== glass params ===================== */
-  const DEFAULTS = { blur:12, lens:22, white:0, edge:100, frost:22, disperse:18, gloss:35, glosssize:50, border:45, radius:30, shadow:35, tint:"light" };
+  const DEFAULTS = { blur:12, lens:22, white:0, edge:100, frost:22, disperse:18, vib:120, curve:28, gloss:35, glosssize:50, border:45, radius:30, shadow:35, tint:"light" };
   const P = { ...DEFAULTS, tintRGB:[1,1,1] };
 
   /* ===================== draggable objects ===================== */
@@ -547,6 +551,8 @@
     edge:  { el:$("s-edge"),  out:$("v-edge"),  fmt:v=>(v/100).toFixed(2)+"×" },
     frost: { el:$("s-frost"), out:$("v-frost"), fmt:v=>v==0?"off":(v/100).toFixed(2) },
     disperse:{ el:$("s-disperse"), out:$("v-disperse"), fmt:v=>v==0?"off":(v/100).toFixed(2) },
+    vib:   { el:$("s-vib"),   out:$("v-vib"),   fmt:v=>v==100?"off":(v/100).toFixed(2)+"×" },
+    curve: { el:$("s-curve"), out:$("v-curve"), fmt:v=>(v/10).toFixed(1) },
     gloss: { el:$("s-gloss"), out:$("v-gloss"), fmt:v=>v==0?"off":(v/100).toFixed(2) },
     glosssize:{ el:$("s-glosssize"), out:$("v-glosssize"), fmt:v=>(v/100).toFixed(2) },
     border:{ el:$("s-border"),out:$("v-border"),fmt:v=>(v/100).toFixed(2) },
@@ -588,6 +594,7 @@
     glossHandle.style.setProperty("--a", glossAngle + "deg");
     $("v-glossangle").textContent = Math.round(glossAngle) + "°";
     applyGloss();
+    glass.setParams({ lightAngle: glossAngle });   // one light: CSS gloss + shader rim glint
   }
   let dialDrag = false;
   function dialFromEvent(e) {
@@ -625,14 +632,14 @@
   /* presets — "Clear" = crystal-clear see-through glass (no blur, no milk,
      light refraction); "Frosted" = heavy blur; "Liquid" = strong lens. */
   const PRESETS = {
-    clear:   { blur:0,  lens:16, white:0,  edge:40,  frost:0  },
-    frosted: { blur:28, lens:10, white:23, edge:35, frost:6 },
-    liquid:  { blur:10, lens:32, white:16, edge:140, frost:30 },
+    clear:   { blur:0,  lens:16, white:0,  edge:40,  frost:0,  disperse:22, vib:120, curve:28 },
+    frosted: { blur:28, lens:10, white:23, edge:35,  frost:6,  disperse:8,  vib:112, curve:20 },
+    liquid:  { blur:10, lens:32, white:16, edge:140, frost:30, disperse:35, vib:132, curve:33 },
   };
   function applyPreset(name) {
     const pre = PRESETS[name]; if (!pre) return;
     Object.assign(P, pre);
-    ["blur","lens","white","edge","frost"].forEach(k => { C[k].el.value = P[k]; readSlider(k); });
+    ["blur","lens","white","edge","frost","disperse","vib","curve"].forEach(k => { C[k].el.value = P[k]; readSlider(k); });
     pushParams();
     document.querySelectorAll("[data-preset]").forEach(b =>
       b.classList.toggle("on", b.dataset.preset === name));
@@ -649,6 +656,8 @@
       edgeLight:  P.edge / 100,
       edgeFrost:  P.frost / 100,
       dispersion: P.disperse / 100,
+      saturation: P.vib / 100,
+      curve:      P.curve / 10,
       radius:     P.radius,
       tint:       P.tintRGB,
     });
@@ -674,6 +683,9 @@
       edgeLight:  f(P.edge / 100),
       edgeFrost:  f(P.frost / 100),
       dispersion: f(P.disperse / 100),
+      saturation: f(P.vib / 100),
+      curve:      f(P.curve / 10),
+      lightAngle: Math.round(glossAngle),
       radius:     P.radius,
       tint:       P.tintRGB,
     };
@@ -686,6 +698,7 @@
       `  edgeLight   ${e.edgeLight}`,
       `  edgeFrost   ${e.edgeFrost}`,
       `  dispersion  ${e.dispersion}`,
+      `  saturation  ${e.saturation}   curve ${e.curve}   lightAngle ${e.lightAngle}°`,
       `  gloss       ${f(P.gloss/100)}  size ${P.glosssize}%  angle ${Math.round(glossAngle)}°  (CSS overlay)`,
       `  radius      ${e.radius}px`,
       `  tint        ${P.tint} [${P.tintRGB.join(", ")}]`,

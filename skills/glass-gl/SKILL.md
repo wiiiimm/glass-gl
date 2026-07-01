@@ -99,9 +99,12 @@ background behind it.
 | `refraction` | ~0–0.5 | Lens strength — how much the background bends/magnifies. |
 | `blur` | px | Frost (sample spread). |
 | `liquidness` | 0–~0.6 | Milky mix toward `tint`. |
-| `edgeLight` | ~0–2 | Top sheen / edge light. |
+| `edgeLight` | ~0–2 | Strength of the **directional rim glint** (bright arc facing the light, soft shade opposite). |
 | `edgeFrost` | 0–1 | Rim band (a frosted border). |
 | `dispersion` | 0–1 | **Chromatic aberration** — splits R/B at the rim so white edges fringe into colour like real glass. Off by default. |
+| `saturation` | ~0.8–1.7 | **Vibrancy** — saturates the refracted backdrop (Apple-material style). `1` = neutral, ~`1.2–1.35` = luminous. |
+| `curve` | 1–4 | **Lens profile** — `1` = linear bend; `~2.5–3.5` = droplet (optically flat centre, steep bend only at the rim — the "liquid" look). |
+| `lightAngle` | deg | Direction the rim glint comes from (`0` = top, `90` = right). |
 | `radius` | px | Default corner radius (override per element via `register`). |
 | `tint` | `[r,g,b]` 0–1 | Glass colour (`[1,1,1]` = clear/light; dark values = dark glass). |
 

@@ -5,8 +5,9 @@
  * so animated backgrounds (Ken Burns, playing video) refract in real time.
  * Any DOM element you register() becomes a refracting glass surface: the engine
  * reads its screen rect every frame and draws the lens (rounded-rect mask →
- * magnification → blur → chromatic edge → edge light/frost) at that spot. Your
- * content sits on top. To refract text/graphics, bake them into the background.
+ * droplet-profile refraction → blur → chromatic edge → vibrancy → directional
+ * rim glint → frost) at that spot. Your content sits on top. To refract
+ * text/graphics, bake them into the background.
  *
  *   const glass = createGlass({ canvas, background: '/bg.jpg' });
  *   glass.register(el);
@@ -32,6 +33,9 @@ const FRAG = `
   uniform float uEdge;     // edge-light strength
   uniform float uFrost;    // edge frost: rim width + brightness (0..1)
   uniform float uDisperse; // chromatic aberration: R/G/B split at the lens edge (0..1)
+  uniform float uSat;      // vibrancy: saturation boost of the refracted backdrop (1 = off)
+  uniform float uCurve;    // lens profile exponent: 1 = linear, ~3 = droplet (flat centre, steep rim)
+  uniform vec2  uLightDir; // light direction for the specular rim glint (unit vector, y up)
   uniform float uRad[MAX]; // per-surface corner radius (px) — match each element's border-radius
   uniform vec3  uTint;     // milk colour
   uniform sampler2D iChannel0;
@@ -52,12 +56,12 @@ const FRAG = `
     vec2 uv = frag / iResolution.xy;
     vec4 bg = texture2D(iChannel0, coverUv(uv));
 
-    float best = 1e9; vec2 bPos = vec2(0.0); vec2 bHalf = vec2(1.0);
+    float best = 1e9; vec2 bPos = vec2(0.0); vec2 bHalf = vec2(1.0); float bRad = 0.0;
     for (int i = 0; i < MAX; i++) {
       if (i < uCount) {
         float r = min(uRad[i], min(uHalf[i].x, uHalf[i].y));
         float d = sdRoundBox(frag - uPos[i], uHalf[i], r);
-        if (d < best) { best = d; bPos = uPos[i]; bHalf = uHalf[i]; }
+        if (d < best) { best = d; bPos = uPos[i]; bHalf = uHalf[i]; bRad = r; }
       }
     }
 
@@ -70,7 +74,12 @@ const FRAG = `
     vec4 color = bg;
     if (bodyMask > 0.0) {
       vec2 cuv = bPos / iResolution.xy;
-      vec2 lens = cuv + (uv - cuv) * (1.0 - lensField * uLens);
+
+      // droplet lens profile — a real liquid-glass blob is optically flat in the
+      // middle and bends hard only near the rim. pow() reshapes the linear field:
+      // curve 1 = old linear lens, ~2.5-3.5 = flat centre + steep rim (droplet).
+      float prof = pow(lensField, max(uCurve, 1.0));
+      vec2 lens = cuv + (uv - cuv) * (1.0 - prof * uLens);
 
       vec4 acc = vec4(0.0); float total = 0.0;
       for (float x = -4.0; x <= 4.0; x++) {
@@ -83,18 +92,36 @@ const FRAG = `
       acc /= total;
 
       // chromatic aberration — split R/B along the radial direction by a small
-      // FIXED offset (independent of surface size), edge-weighted (lensField^2)
-      // so only the rim fringes. White edges break into colour, like real glass.
+      // FIXED offset (independent of surface size), weighted by the lens profile
+      // so the fringe lives exactly where the bending is. White edges break into
+      // colour, like real glass.
       if (uDisperse > 0.0) {
         vec2 dir = normalize(uv - cuv + vec2(1e-5));
-        vec2 disp = dir * uDisperse * lensField * lensField * 0.010;
+        vec2 disp = dir * uDisperse * prof * 0.010;
         acc.r = texture2D(iChannel0, coverUv(lens + disp)).r;
         acc.b = texture2D(iChannel0, coverUv(lens - disp)).b;
       }
 
-      float dy = clamp(uv.y - cuv.y, 0.0, 0.2);
-      float grad = (dy + 0.05) * 0.6;
-      vec4 lighting = clamp(acc + vec4(grad) * uEdge + vec4(rim) * (0.12 + uFrost * 0.6), 0.0, 1.0);
+      // vibrancy — saturate the refracted backdrop so the glass reads luminous
+      // (Apple materials do the same with backdrop saturate()).
+      float luma = dot(acc.rgb, vec3(0.299, 0.587, 0.114));
+      acc.rgb = mix(vec3(luma), acc.rgb, uSat);
+
+      // specular rim lighting — surface normal from the SDF gradient, then a
+      // bright glint on the rim facing the light and a soft shade opposite.
+      // This directional pair is what makes the slab read as a physical object.
+      vec2 e = vec2(1.5, 0.0);
+      vec2 nrm = normalize(vec2(
+        sdRoundBox(frag + e.xy - bPos, bHalf, bRad) - sdRoundBox(frag - e.xy - bPos, bHalf, bRad),
+        sdRoundBox(frag + e.yx - bPos, bHalf, bRad) - sdRoundBox(frag - e.yx - bPos, bHalf, bRad)
+      ) + vec2(1e-5));
+      float band  = pow(lensField, 3.0);                                  // hug the rim
+      float glint = pow(max(dot(nrm,  uLightDir), 0.0), 2.0) * band;
+      float shade = pow(max(dot(nrm, -uLightDir), 0.0), 2.0) * band;
+      float sheen = max(dot(normalize(uv - cuv + vec2(1e-5)), uLightDir), 0.0) * 0.06;
+
+      vec4 lighting = clamp(acc + vec4((glint * 0.55 - shade * 0.22 + sheen) * uEdge)
+                                + vec4(rim) * (0.12 + uFrost * 0.6), 0.0, 1.0);
       lighting = mix(lighting, vec4(uTint, 1.0), uWhite);
       color = mix(bg, lighting, bodyMask);
     }
@@ -108,9 +135,12 @@ const DEFAULT_PARAMS = {
   blur: 1.2,        // sample spread (px)
   refraction: 0.22, // lens strength
   liquidness: 0.0,  // 0..~0.6, mix toward tint
-  edgeLight: 1.0,   // top sheen
+  edgeLight: 1.0,   // rim glint strength
   edgeFrost: 0.22,  // rim band 0..1
   dispersion: 0.0,  // chromatic aberration at the edge (0..1)
+  saturation: 1.0,  // vibrancy of the refracted backdrop (1 = neutral, ~1.3 = luminous)
+  curve: 2.5,       // lens profile: 1 = linear, ~2.5-3.5 = droplet (flat centre, steep rim)
+  lightAngle: 0,    // degrees the rim glint comes from (0 = top, 90 = right)
   radius: 30,       // px — keep in sync with the element's border-radius
   tint: [1, 1, 1],  // milk colour (white = light glass)
 };
@@ -148,7 +178,8 @@ export function createGlass({ canvas, background, params } = {}) {
 
   const U = {};
   ["iResolution","uImgRes","uPos","uHalf","uCount","uBlur","uLens","uWhite",
-   "uEdge","uFrost","uDisperse","uRad","uTint","iChannel0"].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+   "uEdge","uFrost","uDisperse","uSat","uCurve","uLightDir","uRad","uTint","iChannel0"]
+    .forEach(n => U[n] = gl.getUniformLocation(prog, n));
 
   /* ---- background texture ---- */
   const tex = gl.createTexture();
@@ -253,6 +284,10 @@ export function createGlass({ canvas, background, params } = {}) {
     gl.uniform1f(U.uEdge, P.edgeLight);
     gl.uniform1f(U.uFrost, P.edgeFrost);
     gl.uniform1f(U.uDisperse, P.dispersion);
+    gl.uniform1f(U.uSat, P.saturation);
+    gl.uniform1f(U.uCurve, P.curve);
+    const la = (P.lightAngle || 0) * Math.PI / 180;              // 0° = top; y-up in GL
+    gl.uniform2f(U.uLightDir, Math.sin(la), Math.cos(la));
     gl.uniform1fv(U.uRad, radArr);
     gl.uniform3f(U.uTint, P.tint[0], P.tint[1], P.tint[2]);
     gl.activeTexture(gl.TEXTURE0);

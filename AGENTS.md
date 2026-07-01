@@ -28,8 +28,10 @@ The repo ships:
   refract text/graphics, **bake them into the background canvas** (that's what the playground does
   with the `glass-gl` wordmark). A `<canvas>`/`<video>` background is **live** — re-uploaded every
   frame — so Ken Burns slideshows and playing video refract in real time.
-- **Chromatic aberration** (`dispersion` param) splits R/B at the lens rim, so white edges fringe
-  into colour like real glass — strongest near the edge, off (`0`) by default in the library.
+- **The "liquid" look is three shader ingredients** (all params, see `skills/glass-gl/SKILL.md`):
+  `curve` (droplet lens profile — flat centre, steep rim), `dispersion` (chromatic R/B fringe at
+  the rim), and `saturation` (vibrancy of the refracted backdrop). `edgeLight` + `lightAngle`
+  drive a directional specular rim glint (bright arc facing the light, shade opposite).
 - For "frosted panel over live scrolling content", CSS `backdrop-filter` is the right tool — not
   this. `glass-gl` is for glass over a media background: heroes, photo/video backdrops, tiles.
 - **Resource note:** the engine runs a continuous `requestAnimationFrame` loop (GPU stays awake).
@@ -44,7 +46,8 @@ copy. npm still ships the real file; the demo follows the symlink, so they can't
 Public API: `createGlass({ canvas, background })` → `register(el, { radius })` / `unregister` /
 `clear` / `setParams({...})` / `setBackground(src)` / `destroy()`. `setBackground` takes a URL
 string, `<img>`, `<canvas>`, or `<video>` (canvas/video = live, refreshed each frame). Params
-include `dispersion` (chromatic aberration) alongside `refraction`/`blur`/`edgeFrost`/etc.
+include `dispersion`, `saturation`, `curve`, and `lightAngle` alongside `refraction`/`blur`/
+`edgeFrost`/etc. — `skills/glass-gl/SKILL.md` has the full table.
 
 ## Repository layout
 
