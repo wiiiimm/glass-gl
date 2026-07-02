@@ -481,7 +481,7 @@ glass.setParams({
   function clampWin(el) {
     const w = el.offsetWidth, h = el.offsetHeight;
     const x = Math.min(Math.max(parseFloat(el.style.left) || 10, 10), Math.max(10, innerWidth - w - 10));
-    const y = Math.min(Math.max(parseFloat(el.style.top) || 62, 62), Math.max(62, innerHeight - Math.min(h, 120) - 10));
+    const y = Math.min(Math.max(parseFloat(el.style.top) || 62, 62), Math.max(62, innerHeight - h - 10));
     el.style.left = x + "px"; el.style.top = y + "px";
   }
   function focusWin(el) { el.style.zIndex = ++zTop; }
@@ -574,7 +574,17 @@ glass.setParams({
 
   window.addEventListener("resize", () => {
     sizeStage();
-    document.querySelectorAll(".win").forEach(clampWin);
+    // crossing into phone width: reflow open windows into the mobile cascade —
+    // desktop coordinates would leave glass slabs stacked half-offscreen.
+    let i = 0;
+    document.querySelectorAll(".win").forEach(el => {
+      if (isPhone() && el.style.display !== "none") {
+        el.classList.remove("max");
+        el.style.left = "10px";
+        el.style.top = (62 + (i++ % 3) * 22) + "px";
+      }
+      clampWin(el);
+    });
   });
 
   /* ===================== settings app ===================== */

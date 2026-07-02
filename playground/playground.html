@@ -212,6 +212,30 @@
   }
   .hint a:hover { text-decoration: underline; }
   .hint a svg { width: 15px; height: 15px; flex: 0 0 auto; }
+
+  /* ===================== responsive (phones) ===================== */
+  /* gear FAB toggles the control panel on small screens */
+  .panelfab {
+    display: none; position: fixed; top: 14px; right: 14px; z-index: 60;
+    width: 44px; height: 44px; border-radius: 50%; cursor: pointer;
+    border: 1px solid rgb(255 255 255 / .4); background: rgb(0 0 0 / .38); color: #fff;
+    align-items: center; justify-content: center;
+  }
+  .panelfab svg { width: 22px; height: 22px; }
+  @media (max-width: 720px) {
+    .tile { width: min(230px, calc(50vw - 18px)); padding: 10px; }
+    .doc  { width: min(300px, calc(100vw - 24px)); padding: 16px 18px; }
+    .shape.appbar { width: min(374px, calc(100vw - 24px)); padding: 0 18px; }
+    .shape.dock { max-width: calc(100vw - 20px); overflow-x: auto; gap: 6px; scrollbar-width: none; }
+    .shape.dock::-webkit-scrollbar { display: none; }
+    .shape.dock .th { width: 44px; height: 30px; flex: 0 0 auto; }
+    .hint { left: 12px; right: 12px; bottom: 12px; font-size: 11px; }
+    .panelfab { display: flex; }
+    /* panel hidden by default on phones (display:none rects are skipped by the
+       engine); the FAB toggles it. Sized to fit under the FAB. */
+    .panel { display: none; top: 66px; right: 12px; width: min(292px, calc(100vw - 24px)); max-height: calc(100vh - 84px); }
+    body.panel-open .panel { display: block; }
+  }
 </style>
 </head>
 <body>
@@ -220,6 +244,10 @@
 
   <div class="canvas" id="canvas">
     <!-- draggable glass objects injected by script -->
+
+    <button class="panelfab" id="panelFab" aria-label="Show / hide controls">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h9M18 7h2M4 17h3M12 17h8"/><circle cx="15.5" cy="7" r="2.5"/><circle cx="9.5" cy="17" r="2.5"/></svg>
+    </button>
 
     <aside class="panel">
       <h1>glass-gl</h1>
@@ -321,6 +349,7 @@
   ];
   const HEAD = "glass-gl";
   const SUB  = "real-time liquid glass · it refracts the background, not the page";
+  const SUB_NARROW = "it refracts the background";   // fits phone-width stages
 
   const stage = document.createElement("canvas");
   const sx = stage.getContext("2d");
@@ -367,15 +396,15 @@
   function drawText() {
     const cx = stageW / 2, cy = stageH / 2;
     sx.textAlign = "center"; sx.textBaseline = "middle";
-    const hs = Math.round(stageW * 0.085);
+    const hs = Math.max(34, Math.round(stageW * 0.085));   // floor keeps it legible on phones
     sx.save();
     sx.shadowColor = "rgba(0,0,0,.38)"; sx.shadowBlur = stageW * 0.013; sx.shadowOffsetY = 2;
     sx.font = `700 ${hs}px "New York", Georgia, "Times New Roman", serif`;
     sx.fillStyle = "#fff"; sx.fillText(HEAD, cx, cy);
     sx.restore();
-    sx.font = `600 ${Math.round(stageW * 0.0145)}px ui-sans-serif, -apple-system, "Segoe UI", sans-serif`;
+    sx.font = `600 ${Math.max(11, Math.round(stageW * 0.0145))}px ui-sans-serif, -apple-system, "Segoe UI", sans-serif`;
     sx.fillStyle = "rgba(255,255,255,.92)";
-    sx.fillText(SUB, cx, cy + hs * 0.72);
+    sx.fillText(stageW < 560 ? SUB_NARROW : SUB, cx, cy + hs * 0.72);
   }
   function renderStage(now) {
     sx.clearRect(0, 0, stageW, stageH);
@@ -464,6 +493,27 @@
     </div>`;
 
   let zTop = 100;   // dragged blocks jump above the panel/footer (z 50)
+
+  /* responsive helpers — spawn coordinates are authored for a 1440×900 desktop
+     and scaled down to the current viewport; clampShape then pulls anything
+     still sticking out back inside. */
+  const PHONE = () => innerWidth < 720;
+  const SX = x => Math.round(x * Math.min(1, innerWidth / 1440));
+  const SY = y => Math.round(y * Math.min(1, innerHeight / 900));
+  function clampShape(s) {
+    const r = s.getBoundingClientRect();
+    const x = Math.min(Math.max(r.left, 4), Math.max(4, innerWidth - s.offsetWidth - 4));
+    const y = Math.min(Math.max(r.top, 4), Math.max(4, innerHeight - s.offsetHeight - 4));
+    s.style.left = x + "px"; s.style.top = y + "px";
+  }
+  function positionDock(dock) {
+    dock.style.left = Math.round((innerWidth - dock.offsetWidth) / 2) + "px";
+    const hint = document.querySelector(".hint");
+    dock.style.top = PHONE()   // phones: sit just above the footer, not under it
+      ? Math.round(hint.getBoundingClientRect().top - dock.offsetHeight - 10) + "px"
+      : (innerHeight - dock.offsetHeight - 24) + "px";
+  }
+
   function make(html, cls, x, y) {
     const el = document.createElement("div");
     el.className = `shape ${cls}`;
@@ -491,36 +541,47 @@
   function buildScene() {
     scene.querySelectorAll(".shape").forEach(s => s.remove());
     glass.clear();                 // drop stale element refs before re-registering
-    TILES.forEach(t => make(tileHTML(t), "tile", t.x, t.y));
-    DOCS.forEach(d => make(docHTML(d), "doc", d.x, d.y));
-    make(getitHTML, "doc getit", GETIT.x, GETIT.y);
+    if (PHONE()) {
+      // curated single-column scene — less is more on a phone (glassOS, the
+      // home page, carries the full info tiles). Everything stays draggable.
+      make(tileHTML(TILES[0]), "tile", 12, 104);
+      make(docHTML(DOCS[0]), "doc", 12, Math.round(innerHeight * 0.40));
+    } else {
+      TILES.forEach(t => make(tileHTML(t), "tile", SX(t.x), SY(t.y)));
+      DOCS.forEach(d => make(docHTML(d), "doc", SX(d.x), SY(d.y)));
+      make(getitHTML, "doc getit", SX(GETIT.x), SY(GETIT.y));
+    }
 
     // 4 glass icon circles (circle = surface registered with radius = half its size)
     const CIRCLE = ["home", "search", "heart", "user"];
-    const CW = 76, CGAP = 28, cTotal = CIRCLE.length * CW + (CIRCLE.length - 1) * CGAP;
+    const CW = PHONE() ? 54 : 76, CGAP = PHONE() ? 18 : 28;
+    const cTotal = CIRCLE.length * CW + (CIRCLE.length - 1) * CGAP;
     const cStart = Math.round((innerWidth - cTotal) / 2);
     CIRCLE.forEach((n, i) => {
       const el = make(iconSVG(n), "iconbtn", cStart + i * (CW + CGAP), 44);
+      el.style.width = el.style.height = CW + "px";
       glass.register(el, { radius: CW / 2 });
     });
 
-    // iPhone-style bottom app bar — one glass pill with 5 icons
-    const BAR = ["home", "search", "plus", "message", "user"];
-    const BARW = 374, BARH = 66;
-    const bar = make(BAR.map(iconSVG).join(""), "appbar", 60, 378);   // left-middle, just under the first tile
-    glass.register(bar, { radius: BARH / 2 });
+    // iPhone-style bottom app bar — one glass pill with 5 icons (desktop only)
+    if (!PHONE()) {
+      const BAR = ["home", "search", "plus", "message", "user"];
+      const BARH = 66;
+      const bar = make(BAR.map(iconSVG).join(""), "appbar", SX(60), SY(378));   // left-middle, just under the first tile
+      glass.register(bar, { radius: BARH / 2 });
+    }
 
     // slide dock — small glass controller with photo thumbnails (bottom-centre)
     const dockHTML = SLIDES.map((s, i) =>
       `<button class="th${i === curIdx ? " on" : ""}" data-idx="${i}" title="${s.label}" aria-label="${s.label}"><img src="${s.src}" alt="" draggable="false"></button>`).join("");
     const dock = make(dockHTML, "dock", 0, 0);
     glass.register(dock, { radius: 22 });
-    dock.style.left = Math.round((innerWidth - dock.offsetWidth) / 2) + "px";
-    dock.style.top  = (innerHeight - dock.offsetHeight - 24) + "px";
+    positionDock(dock);
     if (userBg) setDockEnabled(false);
 
     applyDOM();
     applyGloss();
+    scene.querySelectorAll(".shape").forEach(clampShape);   // nothing spawns offscreen
     // the UI chrome is WebGL glass too — register with their own corner radii
     glass.register(document.querySelector(".panel"), { radius: 22 });
     glass.register(document.querySelector(".hint"),  { radius: 12 });
@@ -769,6 +830,18 @@
       .catch(() => { btn.textContent = "Copy failed — press ⌘C"; })
       .finally(() => setTimeout(() => { btn.textContent = label; }, 1500));
   };
+
+  /* responsive: FAB toggles the panel on phones; rebuild the scene when the
+     viewport crosses the phone/desktop breakpoint; otherwise keep every block
+     inside the viewport and the dock pinned bottom-centre. */
+  $("panelFab").onclick = () => document.body.classList.toggle("panel-open");
+  let wasPhone = PHONE();
+  window.addEventListener("resize", () => {
+    if (PHONE() !== wasPhone) { wasPhone = PHONE(); buildScene(); return; }
+    scene.querySelectorAll(".shape").forEach(clampShape);
+    const dock = scene.querySelector(".dock");
+    if (dock) positionDock(dock);
+  });
 
   /* init — glass-gl owns its render loop + resize; we just drive params + shapes */
   resetAll();
