@@ -82,7 +82,8 @@ you'd install:
 - **`index.html` — glassOS** (the home page). A tiny responsive desktop where *everything*
   is glass: menu bar, dock, draggable app windows. The windows are pages — About, How it
   works, Skills & install (with "For humans / For AI agents" tabs), Wallpapers, Settings,
-  and a Terminal. The dock links out to the playground.
+  Music (Spotify embed), Video (YouTube embed), and a Terminal. The dock links out to the
+  playground.
 - **`playground.html` — the parameter playground.** Drag glass cards over a photo and tune
   every parameter live (presets, sliders, copy-as-code). Add `?transparent` to see
   transparent mode over the page's own live canvas.
