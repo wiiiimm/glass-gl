@@ -11,9 +11,9 @@ edge-light), not just a `backdrop-filter` blur. Status: **experimental**.
 
 The repo ships:
 - **The engine** — `packages/glass-gl/` (the npm package, name `glass-gl`).
-- **Interactive demos** — `playground/` — `index.html` (drag glass cards over a photo, tune every
-  parameter live) and `os.html` (**glassOS**, a responsive desktop made entirely of glass). Both
-  are *consumers* of the engine (they prove the library works).
+- **Interactive demos** — `playground/` — `index.html` (**glassOS**, a responsive desktop made
+  entirely of glass — the home page) and `playground.html` (drag glass cards over a photo, tune
+  every parameter live). Both are *consumers* of the engine (they prove the library works).
 
 > Naming is settled: the product/package is **`glass-gl`** (repo `wiiiimm/glass-gl`). The local
 > folder is still named `glass-ui-kit` for historical reasons — that's fine, it doesn't matter.
@@ -49,16 +49,17 @@ Public API: `createGlass({ canvas, background, dpr, transparent })` → `registe
 takes a URL string, `<img>`, `<canvas>`, or `<video>` (canvas/video = live, refreshed each frame).
 Options: `dpr` = retina-sharp buffers by default (≤2×; number to cap, `false` for 1:1);
 `transparent: true` = draw only the lenses (premultiplied alpha) for glass over the page's own
-live canvas (demo: `playground/index.html?transparent`). Params include `dispersion`,
+live canvas (demo: `playground/playground.html?transparent`). Params include `dispersion`,
 `saturation`, `curve`, and `lightAngle` alongside `refraction`/`blur`/`edgeFrost`/etc.
 (`edgeFrost: 0` = no rim since 0.3.0) — `skills/glass-gl/SKILL.md` has the full table.
 
 ## Repository layout
 
 - `packages/glass-gl/` — the npm package: `glass-gl.js` (canonical engine), `package.json`, `README.md`.
-- `playground/` — interactive demos: `index.html` (parameter playground), `os.html` (glassOS — a
-  responsive glass desktop: menu bar, dock, app windows as info pages), `glass-gl.js` (symlink),
-  `images/`. **Wired to a Vercel deployment — don't restructure this directory.**
+- `playground/` — interactive demos: `index.html` (glassOS — a responsive glass desktop: menu bar,
+  dock, app windows as info pages — the home page), `playground.html` (parameter playground),
+  `os.html` (redirect stub for old links), `glass-gl.js` (symlink), `images/`. **Wired to a
+  Vercel deployment — don't restructure this directory.**
 - `skills/glass-gl/SKILL.md` — the distributable agent skill (installable via `npx skills add
   wiiiimm/glass-gl`). **Canonical agent-facing usage doc** — when the library's API/usage changes,
   update `SKILL.md` (don't re-document it in a new place). It references the engine by npm/CDN, never

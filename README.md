@@ -79,16 +79,18 @@ gotchas). It references the engine by npm/CDN, so there's no second copy to drif
 The `playground/` directory ships two demos, both plain consumers of the same `glass-gl.js`
 you'd install:
 
-- **`index.html` — the parameter playground.** Drag glass cards over a photo and tune every
-  parameter live (presets, sliders, copy-as-code).
-- **`os.html` — glassOS.** A tiny responsive desktop where *everything* is glass: menu bar,
-  dock, draggable app windows. The windows are pages — About, How it works, Skills & install
-  (with "For humans / For AI agents" tabs), Wallpapers, Settings, and a Terminal.
+- **`index.html` — glassOS** (the home page). A tiny responsive desktop where *everything*
+  is glass: menu bar, dock, draggable app windows. The windows are pages — About, How it
+  works, Skills & install (with "For humans / For AI agents" tabs), Wallpapers, Settings,
+  and a Terminal. The dock links out to the playground.
+- **`playground.html` — the parameter playground.** Drag glass cards over a photo and tune
+  every parameter live (presets, sliders, copy-as-code). Add `?transparent` to see
+  transparent mode over the page's own live canvas.
 
 ```bash
 cd playground && python3 -m http.server 8000
-# open http://localhost:8000        (playground)
-# open http://localhost:8000/os.html  (glassOS)
+# open http://localhost:8000                  (glassOS)
+# open http://localhost:8000/playground.html  (parameter playground)
 ```
 
 ## Releasing

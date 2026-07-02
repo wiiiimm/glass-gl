@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-<title>glass-gl — Playground (real-time WebGL liquid glass)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>glassOS — a desktop made of glass (built with glass-gl)</title>
 <style>
   * { box-sizing: border-box; }
   html, body {
@@ -12,164 +12,156 @@
     color: #fff; background: #0a0c16;
     -webkit-user-select: none; user-select: none;
   }
-  img.hidden-src { display: none; }
 
-  /* fullscreen WebGL canvas: renders the background + refracting glass for
-     every draggable object. Sits behind all DOM. */
-  /* size set in JS to window.innerWidth/innerHeight (NOT 100vw/100vh) so the
-     canvas display box matches its drawing buffer + the cards' client rects.
-     On iOS Safari 100vh != innerHeight, which would offset the WebGL glass. */
+  /* fullscreen WebGL canvas: wallpaper + every refracting glass surface.
+     Sized in JS to innerWidth/innerHeight so glass rects match DOM rects. */
   #gl { position: fixed; top: 0; left: 0; display: block; z-index: 0; }
+  .desktop { position: fixed; inset: 0; z-index: 1; }
 
-  .canvas { position: fixed; inset: 0; z-index: 1; }
-
-  /* =========================================================================
-     DRAGGABLE OBJECTS — transparent DOM frames. The GLASS is drawn by the
-     WebGL shader behind them (real refraction). Only content + a crisp rim
-     live in the DOM, sitting on top of the refracted glass.
-     ========================================================================= */
-  .shape {
-    position: absolute; z-index: 5;
-    touch-action: none; cursor: grab;
-    border-radius: var(--radius, 30px);
-    border: 1px solid rgb(255 255 255 / var(--border, .45));
-    box-shadow: 0 24px 60px rgb(0 0 0 / var(--shadow, .35));
-    transition: box-shadow .15s ease;
-    will-change: left, top;
+  a { color: #fff; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em;
+    background: rgb(0 0 0 / .32); padding: 1px 6px; border-radius: 6px;
   }
-  .shape.dragging { cursor: grabbing; box-shadow: 0 44px 100px rgb(0 0 0 / .5); }
-  .shape.dark { --border: .35; }   /* dark = darker glass tint (shader); content stays light */
-
-  /* gloss: a directional reflective sheen layered OVER the tile content
-     (image + text). Steered by the angle dial, tuned by the two gloss sliders. */
-  .shape::after {
-    content: ""; position: absolute; inset: 0; border-radius: inherit;
-    pointer-events: none;
-    background: linear-gradient(var(--gloss-angle, 210deg),
-      rgba(255,255,255, var(--gloss-strength, 0.35)) 0%,
-      rgba(255,255,255, 0) var(--gloss-size, 45%));
+  pre.code {
+    margin: 8px 0; padding: 10px 12px; border-radius: 10px;
+    background: rgb(0 0 0 / .38); border: 1px solid rgb(255 255 255 / .12);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px;
+    line-height: 1.5; overflow-x: auto; white-space: pre;
   }
 
-  /* circular angle control */
-  .dial {
-    width: 60px; height: 60px; margin: 2px auto 0; border-radius: 50%;
-    border: 1px solid rgb(255 255 255 / .35); background: rgb(255 255 255 / .07);
-    position: relative; cursor: grab; touch-action: none;
+  /* ===================== menu bar ===================== */
+  .menubar {
+    position: fixed; top: 10px; left: 10px; right: 10px; z-index: 40;
+    height: 42px; padding: 0 16px; border-radius: 14px;
+    display: flex; align-items: center; gap: 18px;
+    border: 1px solid rgb(255 255 255 / .3);
+    box-shadow: 0 12px 32px rgb(0 0 0 / .28), inset 0 1px 0 rgb(255 255 255 / .35);
   }
-  .dial::before {
-    content: ""; position: absolute; inset: 0; border-radius: 50%;
-    background: radial-gradient(circle at 50% 32%, rgb(255 255 255 / .18), transparent 60%);
+  .menubar .logo { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 14px; }
+  .menubar .logo svg { width: 17px; height: 17px; }
+  .menubar .menus { display: flex; gap: 4px; }
+  .menubar .menus button {
+    appearance: none; border: 0; background: transparent; color: #fff; cursor: pointer;
+    font: 600 12.5px/1 inherit; padding: 7px 10px; border-radius: 8px; opacity: .85;
   }
-  .dial-handle { position: absolute; inset: 0; transform: rotate(var(--a, 0deg)); }
-  .dial-handle::after {
-    content: ""; position: absolute; top: 4px; left: 50%; margin-left: -4.5px;
-    width: 9px; height: 9px; border-radius: 50%; background: #fff;
-    box-shadow: 0 1px 4px rgb(0 0 0 / .4);
-  }
+  .menubar .menus button:hover { background: rgb(255 255 255 / .16); opacity: 1; }
+  .menubar .right { margin-left: auto; display: flex; align-items: center; gap: 14px; font-size: 12px; font-weight: 700; }
+  .menubar .right a { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; opacity: .9; }
+  .menubar .right a:hover { opacity: 1; text-decoration: underline; }
+  .menubar .right svg { width: 15px; height: 15px; }
+  .menubar .clock { font-variant-numeric: tabular-nums; opacity: .95; }
 
-  /* glass icon circle — a circle is just a glass surface registered with radius = half its size */
-  .shape.iconbtn {
-    width: 76px; height: 76px; padding: 0; border-radius: 50%;
+  /* ===================== dock ===================== */
+  .dock {
+    /* centred via inset+margin (not translateX) so the element's layout rect —
+       which the engine reads for the glass — always matches what's on screen */
+    position: fixed; left: 0; right: 0; margin: 0 auto; width: fit-content; z-index: 40;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    display: flex; gap: 10px; padding: 10px 14px; border-radius: 26px;
+    border: 1px solid rgb(255 255 255 / .3);
+    box-shadow: 0 18px 44px rgb(0 0 0 / .32), inset 0 1px 0 rgb(255 255 255 / .35);
+  }
+  .dock button, .dock a {
+    appearance: none; border: 0; cursor: pointer; position: relative;
+    width: 52px; height: 52px; border-radius: 15px; color: #fff;
+    background: rgb(255 255 255 / .1); border: 1px solid rgb(255 255 255 / .22);
     display: flex; align-items: center; justify-content: center;
-    transition: transform .22s cubic-bezier(.34, 1.56, .64, 1);
+    transition: transform .2s cubic-bezier(.34,1.56,.64,1), background .15s;
   }
-  .shape.iconbtn .icon {
-    width: 32px; height: 32px; color: #fff; filter: drop-shadow(0 1px 2px rgb(0 0 0 / .45));
-    transition: transform .22s cubic-bezier(.34, 1.56, .64, 1);
-  }
-  .shape.iconbtn:hover { transform: translateY(-4px); }
-  .shape.iconbtn:hover .icon { transform: scale(1.12); }
-  .shape.iconbtn:active .icon { transform: scale(.92); transition-duration: .09s; }
-
-  /* iPhone-style bottom app bar — one glass pill holding 5 icons */
-  .shape.appbar {
-    width: 374px; height: 66px; padding: 0 24px; border-radius: 33px;
-    display: flex; align-items: center; justify-content: space-between;
-  }
-  .shape.appbar .icon {
-    width: 26px; height: 26px; color: #fff; opacity: .82;
-    filter: drop-shadow(0 1px 2px rgb(0 0 0 / .45));
+  .dock button:hover, .dock a:hover { transform: translateY(-6px); background: rgb(255 255 255 / .2); }
+  .dock button:active, .dock a:active { transform: translateY(-2px) scale(.95); }
+  .dock button svg, .dock a svg { width: 26px; height: 26px; filter: drop-shadow(0 1px 2px rgb(0 0 0 / .45)); }
+  .dock .sep { width: 1px; align-self: stretch; margin: 4px 2px; background: rgb(255 255 255 / .28); }
+  .dock button.on::after {
+    content: ""; position: absolute; left: 50%; bottom: -7px; margin-left: -2px;
+    width: 4px; height: 4px; border-radius: 50%; background: #fff;
   }
 
-  /* slide dock — small glass controller with photo thumbnails */
-  .shape.dock {
-    display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 22px;
-    transition: opacity .2s ease;
+  /* ===================== windows ===================== */
+  .win {
+    position: absolute; z-index: 10; display: flex; flex-direction: column;
+    width: min(var(--w, 380px), calc(100vw - 20px));
+    max-height: calc(100vh - 64px - 96px - env(safe-area-inset-bottom, 0px));
+    border-radius: 20px; touch-action: none;
+    border: 1px solid rgb(255 255 255 / .32);
+    box-shadow: 0 28px 70px rgb(0 0 0 / .4), inset 0 1px 0 rgb(255 255 255 / .35);
   }
-  .shape.dock .th {
-    width: 56px; height: 38px; padding: 0; border: 0; border-radius: 10px; cursor: pointer;
-    overflow: hidden; background: none; outline: 2px solid transparent; outline-offset: 2px;
-    transition: outline-color .18s ease, transform .18s ease;
+  .win.max {
+    left: 10px !important; top: 62px !important;
+    width: calc(100vw - 20px) !important;
+    height: calc(100vh - 62px - 96px - env(safe-area-inset-bottom, 0px)) !important;
+    max-height: none;
   }
-  .shape.dock .th img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .shape.dock .th:hover { transform: translateY(-2px); }
-  .shape.dock .th.on { outline-color: #fff; }
-  .shape.dock.disabled { opacity: .4; pointer-events: none; }
+  .win-title {
+    display: flex; align-items: center; gap: 10px; flex: 0 0 auto;
+    padding: 11px 14px 9px; cursor: grab; border-radius: 20px 20px 0 0;
+  }
+  .win.dragging .win-title { cursor: grabbing; }
+  .win-title .name { font-size: 12.5px; font-weight: 800; opacity: .95; }
+  .lights { display: flex; gap: 7px; }
+  .lights button {
+    appearance: none; width: 12px; height: 12px; padding: 0; border-radius: 50%;
+    border: 1px solid rgb(0 0 0 / .18); cursor: pointer;
+  }
+  .lights .r { background: #ff5f57; } .lights .y { background: #febc2e; } .lights .g { background: #28c840; }
+  .win-body {
+    padding: 2px 18px 16px; overflow-y: auto; overscroll-behavior: contain;
+    font-size: 13px; line-height: 1.55; font-weight: 600;
+    -webkit-user-select: text; user-select: text;
+  }
+  .win-body p { margin: 8px 0; }
+  .win-body ul, .win-body ol { margin: 8px 0; padding-left: 20px; }
+  .win-body li { margin: 5px 0; }
+  .win-body .lead { font-size: 13.5px; }
+  .win-body .dim { opacity: .75; font-size: 12px; }
+  .win-body b { font-weight: 800; }
 
-  .tile { width: 230px; padding: 15px; }
-  .tile .photo {
-    width: 100%; aspect-ratio: 1 / 1; border-radius: 18px; overflow: hidden;
-    pointer-events: none; box-shadow: 0 8px 22px rgb(0 0 0 / .28);
-  }
-  .tile .photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .tile .cap { margin: 11px 4px 2px; font-size: 14px; font-weight: 800; }
-  .tile .sub { margin: 0 4px; font-size: 12px; font-weight: 600; opacity: .85; }
-
-  .doc { width: 300px; padding: 22px 24px; }
-  .doc h3 { margin: 0 0 8px; font-size: 16px; font-weight: 800; }
-  .doc p  { margin: 0; font-size: 13px; line-height: 1.55; font-weight: 600; opacity: .96; }
-  .doc code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
-    background: rgb(0 0 0 / .3); padding: 1px 6px; border-radius: 6px;
-  }
-  .doc .pill {
-    display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .5px;
-    padding: 3px 11px; border-radius: 999px; border: 1px solid currentColor;
-    opacity: .85; margin-bottom: 11px;
-  }
-  /* "Get it" tabbed card */
-  .getit .tabs {
-    display: inline-flex; gap: 3px; padding: 3px; margin-bottom: 13px;
+  /* For humans / For AI tabs */
+  .tabs {
+    display: inline-flex; gap: 3px; padding: 3px; margin: 6px 0 4px;
     border-radius: 999px; background: rgb(0 0 0 / .28);
     border: 1px solid rgb(255 255 255 / .14);
   }
-  .getit .tab {
+  .tab {
     appearance: none; border: 0; cursor: pointer; color: #fff;
     font: 800 11.5px/1 inherit; letter-spacing: .3px;
     padding: 6px 14px; border-radius: 999px; background: transparent; opacity: .7;
     transition: background .15s, opacity .15s;
   }
-  .getit .tab:hover { opacity: .95; }
-  .getit .tab.on { background: rgb(255 255 255 / .92); color: #111; opacity: 1; }
-  .getit .pane[hidden] { display: none; }
-  .getit .pane p { min-height: 78px; }
+  .tab:hover { opacity: .95; }
+  .tab.on { background: rgb(255 255 255 / .92); color: #111; opacity: 1; }
+  .pane[hidden] { display: none; }
 
-  /* =========================================================================
-     CONTROL PANEL — pinned. Stays CSS glass (backdrop-filter frosts the WebGL
-     canvas behind it), so the page shows BOTH techniques side by side.
-     ========================================================================= */
-  .panel, .hint {
-    /* transparent so the WebGL glass behind them shows through (they're
-       registered with the engine). Border + shadow + inset highlight = definition. */
-    background: transparent;
-    border: 1px solid rgb(255 255 255 / .3);
-    box-shadow: 0 24px 60px rgb(0 0 0 / .28), inset 0 1px 0 rgb(255 255 255 / .4);
+  /* terminal */
+  .win.terminal .win-body {
+    background: rgb(6 8 16 / .55); border-radius: 0 0 20px 20px;
+    padding-top: 10px;
   }
-  .panel {
-    position: fixed; top: 18px; right: 18px; z-index: 50;
-    width: 292px; max-height: calc(100vh - 36px); overflow-y: auto;
-    padding: 18px 18px 15px; border-radius: 22px;
+  .term {
+    margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
   }
-  .panel h1 { margin: 0 0 1px; font-size: 17px; font-weight: 800; }
-  .panel .tag { margin: 0 0 6px; font-size: 12px; font-weight: 600; opacity: .8; }
-  .panel .sec { margin: 13px 0 7px; font-size: 11px; font-weight: 800; letter-spacing: .6px; opacity: .6; text-transform: uppercase; }
-  .ctrl { margin-bottom: 12px; }
-  .ctrl .row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
-  .ctrl label { font-size: 12.5px; font-weight: 700; }
-  .ctrl .val { font-size: 12px; font-weight: 700; opacity: .85; font-variant-numeric: tabular-nums; }
+  .term .cursor { animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* settings controls */
+  .toggles { display: flex; gap: 8px; margin: 8px 0; }
+  .toggle {
+    flex: 1; text-align: center; font-size: 12px; font-weight: 700;
+    padding: 8px 0; border-radius: 11px; cursor: pointer;
+    border: 1px solid rgb(255 255 255 / .35); background: rgb(255 255 255 / .07);
+    color: #fff; font-family: inherit; transition: background .15s ease;
+  }
+  .toggle:hover { background: rgb(255 255 255 / .16); }
+  .toggle.on { background: #fff; color: #12233b; border-color: #fff; }
+  .ctrl { margin-bottom: 10px; }
+  .ctrl .row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+  .ctrl label { font-size: 12px; font-weight: 700; }
+  .ctrl .val { font-size: 11.5px; font-weight: 700; opacity: .85; font-variant-numeric: tabular-nums; }
   input[type=range] {
     -webkit-appearance: none; appearance: none; width: 100%; height: 18px;
-    background: transparent; cursor: pointer; margin: 0;
+    background: transparent; cursor: pointer; margin: 0; touch-action: none;
   }
   input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; background: rgb(255 255 255 / .45); }
   input[type=range]::-webkit-slider-thumb {
@@ -178,133 +170,74 @@
   }
   input[type=range]::-moz-range-track { height: 4px; border-radius: 999px; background: rgb(255 255 255 / .45); }
   input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 50%; background: #fff; }
-
-  .toggles { display: flex; gap: 8px; margin: 4px 0 6px; }
-  .toggle {
-    flex: 1; text-align: center; font-size: 12.5px; font-weight: 700;
-    padding: 9px 0; border-radius: 12px; cursor: pointer;
-    border: 1px solid rgb(255 255 255 / .35); background: rgb(255 255 255 / .07);
-    color: #fff; font-family: inherit; transition: background .15s ease;
-  }
-  .toggle:hover { background: rgb(255 255 255 / .16); }
-  .toggle.on { background: #fff; color: #12233b; border-color: #fff; }
-
-  .actions { display: flex; gap: 8px; margin-top: 10px; }
   .btn {
-    flex: 1; height: 40px; border-radius: 12px; border: 0; cursor: pointer;
-    font-family: inherit; font-size: 13px; font-weight: 800;
-    display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 38px; border-radius: 11px; border: 0; cursor: pointer;
+    font-family: inherit; font-size: 12.5px; font-weight: 800; margin-top: 8px;
+    background: rgb(255 255 255 / .1); color: #fff; border: 1px solid rgb(255 255 255 / .35);
   }
-  .btn.primary { background: #fff; color: #12233b; }
-  .btn.ghost { background: rgb(255 255 255 / .1); color: #fff; border: 1px solid rgb(255 255 255 / .35); }
-  .btn:active { transform: translateY(1px); }
+  .btn:hover { background: rgb(255 255 255 / .18); }
+  .btn.primary { background: #fff; color: #12233b; border-color: #fff; }
 
-  .hint {
-    position: fixed; left: 18px; bottom: 16px; z-index: 50;
-    padding: 10px 15px; border-radius: 12px; font-size: 12px; font-weight: 600; opacity: .95;
-    display: flex; flex-direction: column; gap: 4px; cursor: grab;
+  /* wallpaper grid */
+  .walls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0 2px; }
+  .walls button {
+    appearance: none; padding: 0; border: 0; cursor: pointer; border-radius: 10px;
+    overflow: hidden; aspect-ratio: 3 / 2; background: rgb(255 255 255 / .06);
+    outline: 2px solid transparent; outline-offset: 2px; transition: outline-color .15s, transform .15s;
   }
-  .hint.dragging { cursor: grabbing; }
-  .hint b { font-weight: 800; }
-  .hint a {
-    display: inline-flex; align-items: center; gap: 6px; width: fit-content;
-    color: #fff; text-decoration: none; opacity: .9;
+  .walls button:hover { transform: translateY(-2px); }
+  .walls button.on { outline-color: #fff; }
+  .walls img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .walls.disabled { opacity: .4; pointer-events: none; }
+
+  /* ===================== responsive ===================== */
+  @media (max-width: 720px) {
+    .menubar { height: 40px; padding: 0 12px; gap: 10px; }
+    .menubar .menus, .menubar .right .linktext, .menubar .clock .date { display: none; }
+    .dock { gap: 7px; padding: 8px 10px; border-radius: 22px; }
+    .dock button { width: 44px; height: 44px; border-radius: 13px; }
+    .dock button svg { width: 22px; height: 22px; }
+    .win { max-height: calc(100vh - 60px - 86px - env(safe-area-inset-bottom, 0px)); }
   }
-  .hint a:hover { text-decoration: underline; }
-  .hint a svg { width: 15px; height: 15px; flex: 0 0 auto; }
 </style>
 </head>
 <body>
-  <img id="srcImage" class="hidden-src" crossorigin="anonymous" alt="" />
   <canvas id="gl"></canvas>
+  <div class="desktop" id="desktop">
 
-  <div class="canvas" id="canvas">
-    <!-- draggable glass objects injected by script -->
-
-    <aside class="panel">
-      <h1>glass-gl</h1>
-      <p class="tag">real-time liquid glass · drag any object</p>
-
-      <div class="toggles" style="margin-bottom:4px">
-        <button class="toggle" data-preset="clear">Clear</button>
-        <button class="toggle" data-preset="frosted">Frosted</button>
-        <button class="toggle" data-preset="liquid">Liquid</button>
-      </div>
-
-      <div class="sec">Glass (shader)</div>
-      <div class="ctrl"><div class="row"><label>Blur</label><span class="val" id="v-blur"></span></div>
-        <input type="range" id="s-blur" min="0" max="30" step="1"></div>
-      <div class="ctrl"><div class="row"><label>Refraction</label><span class="val" id="v-lens"></span></div>
-        <input type="range" id="s-lens" min="0" max="50" step="1"></div>
-      <div class="ctrl"><div class="row"><label>Liquidness</label><span class="val" id="v-white"></span></div>
-        <input type="range" id="s-white" min="0" max="70" step="1"></div>
-      <div class="ctrl"><div class="row"><label>Edge light</label><span class="val" id="v-edge"></span></div>
-        <input type="range" id="s-edge" min="0" max="200" step="5"></div>
-      <div class="ctrl"><div class="row"><label>Edge frost <span style="opacity:.6">(rim border)</span></label><span class="val" id="v-frost"></span></div>
-        <input type="range" id="s-frost" min="0" max="100" step="2"></div>
-      <div class="ctrl"><div class="row"><label>Chromatic <span style="opacity:.6">(edge dispersion)</span></label><span class="val" id="v-disperse"></span></div>
-        <input type="range" id="s-disperse" min="0" max="100" step="2"></div>
-      <div class="ctrl"><div class="row"><label>Vibrance <span style="opacity:.6">(backdrop saturation)</span></label><span class="val" id="v-vib"></span></div>
-        <input type="range" id="s-vib" min="80" max="170" step="5"></div>
-      <div class="ctrl"><div class="row"><label>Lens profile <span style="opacity:.6">(1 flat → 4 droplet)</span></label><span class="val" id="v-curve"></span></div>
-        <input type="range" id="s-curve" min="10" max="40" step="1"></div>
-      <div class="ctrl"><div class="row"><label>Gloss <span style="opacity:.6">(reflective top)</span></label><span class="val" id="v-gloss"></span></div>
-        <input type="range" id="s-gloss" min="0" max="100" step="2"></div>
-      <div class="ctrl"><div class="row"><label>Gloss size</label><span class="val" id="v-glosssize"></span></div>
-        <input type="range" id="s-glosssize" min="0" max="100" step="2"></div>
-      <div class="ctrl"><div class="row"><label>Light angle <span style="opacity:.6">(gloss + rim glint)</span></label><span class="val" id="v-glossangle"></span></div>
-        <div class="dial" id="glossDial"><div class="dial-handle"></div></div></div>
-      <div class="ctrl"><div class="row"><label>Corner radius <span style="opacity:.6">(glass + frame)</span></label><span class="val" id="v-radius"></span></div>
-        <input type="range" id="s-radius" min="8" max="54" step="1"></div>
-
-      <div class="sec">Frame (DOM)</div>
-      <div class="ctrl"><div class="row"><label>Border</label><span class="val" id="v-border"></span></div>
-        <input type="range" id="s-border" min="0" max="100" step="2"></div>
-      <div class="ctrl"><div class="row"><label>Shadow</label><span class="val" id="v-shadow"></span></div>
-        <input type="range" id="s-shadow" min="0" max="60" step="2"></div>
-
-      <div class="toggles">
-        <button class="toggle on" id="t-light">Light glass</button>
-        <button class="toggle" id="t-dark">Dark glass</button>
-      </div>
-
-      <div class="actions">
-        <button class="btn primary" id="add">+ Add tile</button>
-        <button class="btn ghost" id="reset">Reset</button>
-      </div>
-      <button class="btn ghost" id="copy" style="width:100%;margin-top:8px">Copy settings</button>
-      <input type="file" id="bgFile" accept="image/*,video/*" style="display:none">
-      <button class="btn ghost" id="bgBtn" style="width:100%;margin-top:8px">Upload background (image / video)…</button>
-      <button class="btn ghost" id="bgClear" style="width:100%;margin-top:8px;display:none">Clear — resume slideshow</button>
-    </aside>
-
-    <div class="hint">
-      <span>Built with <b>glass-gl</b> · drag <b>any</b> block — even the panel &amp; this footer</span>
-      <a href="os.html">
+    <header class="menubar" id="menubar">
+      <span class="logo">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9Z"/></svg>
-        Try <b>glassOS</b> — a desktop made entirely of glass →</a>
-      <a href="https://github.com/wiiiimm/glass-gl" target="_blank" rel="noopener noreferrer">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.37.5 0 5.84 0 12.42c0 5.26 3.44 9.72 8.2 11.3.6.11.82-.26.82-.58 0-.29-.01-1.05-.02-2.06-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.74.08-.74 1.2.09 1.84 1.25 1.84 1.25 1.07 1.85 2.81 1.32 3.5 1.01.11-.78.42-1.32.76-1.62-2.67-.31-5.47-1.35-5.47-5.99 0-1.32.47-2.4 1.24-3.25-.12-.31-.54-1.55.12-3.22 0 0 1.01-.33 3.3 1.24a11.4 11.4 0 0 1 6.01 0c2.29-1.57 3.3-1.24 3.3-1.24.66 1.67.24 2.91.12 3.22.77.85 1.24 1.93 1.24 3.25 0 4.65-2.8 5.67-5.48 5.97.43.38.81 1.13.81 2.28 0 1.65-.01 2.98-.01 3.38 0 .32.22.7.83.58C20.56 22.13 24 17.68 24 12.42 24 5.84 18.63.5 12 .5z"/></svg>
-        GitHub · github.com/wiiiimm/glass-gl</a>
-    </div>
+        glassOS
+      </span>
+      <nav class="menus">
+        <button data-app="about">About</button>
+        <button data-app="how">How it works</button>
+        <button data-app="skills">Skills</button>
+        <button data-app="settings">Settings</button>
+      </nav>
+      <span class="right">
+        <a href="playground.html"><span class="linktext">Playground</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.5"/><circle cx="10" cy="17" r="2.5"/></svg></a>
+        <a href="https://github.com/wiiiimm/glass-gl" target="_blank" rel="noopener noreferrer" aria-label="GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.37.5 0 5.84 0 12.42c0 5.26 3.44 9.72 8.2 11.3.6.11.82-.26.82-.58 0-.29-.01-1.05-.02-2.06-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.74.08-.74 1.2.09 1.84 1.25 1.84 1.25 1.07 1.85 2.81 1.32 3.5 1.01.11-.78.42-1.32.76-1.62-2.67-.31-5.47-1.35-5.47-5.99 0-1.32.47-2.4 1.24-3.25-.12-.31-.54-1.55.12-3.22 0 0 1.01-.33 3.3 1.24a11.4 11.4 0 0 1 6.01 0c2.29-1.57 3.3-1.24 3.3-1.24.66 1.67.24 2.91.12 3.22.77.85 1.24 1.93 1.24 3.25 0 4.65-2.8 5.67-5.48 5.97.43.38.81 1.13.81 2.28 0 1.65-.01 2.98-.01 3.38 0 .32.22.7.83.58C20.56 22.13 24 17.68 24 12.42 24 5.84 18.63.5 12 .5z"/></svg></a>
+        <span class="clock" id="clock"></span>
+      </span>
+    </header>
+
+    <nav class="dock" id="dock"><!-- app buttons injected --></nav>
+
+    <!-- windows injected here -->
   </div>
 
   <script type="module">
   import { createGlass } from "./glass-gl.js";
 
-  /* ===================== set up the liquid-glass engine =====================
-     The entire WebGL renderer now lives in glass-core.js (the library). Here we
-     just point it at a background to refract, then register the elements we want
-     to BE glass. This file is now a *consumer* of the library. */
   const canvasEl = document.getElementById("gl");
-  const scene = document.getElementById("canvas");
+  const desktop = document.getElementById("desktop");
 
-  /* ===================== background stage =====================
-     A canvas we paint every frame: photo (Ken Burns zoom/pan, cross-faded
-     slideshow) + the glass-gl wordmark baked ON the photo. We hand this canvas
-     to the engine as a LIVE background, so the glass actually refracts both the
-     moving scene AND the text — exactly the "bake content into the background"
-     rule. Upload an image/video to override; clear to resume the slideshow. */
+  /* ===================== wallpaper stage =====================
+     Same trick as the playground: a canvas painted every frame (Ken Burns
+     slideshow + the glassOS wordmark baked ON the photo), handed to the engine
+     as a LIVE background — every window refracts moving photo AND text. */
   const SLIDES = [
     { src:"images/bg-transit.jpg",   label:"Transit"   },
     { src:"images/bg-neon.jpg",      label:"Neon"      },
@@ -319,8 +252,9 @@
     { src:"images/bg-puffin.jpg",    label:"Puffin"    },
     { src:"images/bg-beach.jpg",     label:"Beach"     },
   ];
-  const HEAD = "glass-gl";
-  const SUB  = "real-time liquid glass · it refracts the background, not the page";
+  const HEAD = "glassOS";
+  const SUB  = "every window here is a real WebGL lens — built with glass-gl";
+  const SUB_NARROW = "real WebGL glass — glass-gl";   // fits phone-width stages
 
   const stage = document.createElement("canvas");
   const sx = stage.getContext("2d");
@@ -333,9 +267,8 @@
     stageH = stage.height = Math.max(1, Math.round(window.innerHeight * scale));
   }
   sizeStage();
-  window.addEventListener("resize", sizeStage);
 
-  const HOLD = 9000, FADE = 1400;   // ms: hold per slide before advancing, cross-fade duration
+  const HOLD = 9000, FADE = 1400;
   let curIdx = 0, nextIdx = 1, slideStart = performance.now();
   let fading = false, fadeStart = 0, auto = true, userBg = null;
 
@@ -343,16 +276,10 @@
   const srcW = m => m.naturalWidth  || m.videoWidth  || 0;
   const srcH = m => m.naturalHeight || m.videoHeight || 0;
 
-  // Ken Burns from ONE continuous clock (smooth sine drift, never resets). Every
-  // slide is drawn with the SAME transform, so a cross-fade is a clean opacity
-  // blend at matched scale — no shrink/pop when the image changes.
+  // one continuous Ken Burns clock → cross-fades never pop (see playground)
   function kb(now) {
     const a = now / 11000;
-    return {
-      z:  1.12 + 0.05 * Math.sin(a),          // zoom 1.07 → 1.17, smooth
-      px: 0.028 * Math.sin(a * 0.55),         // slow lissajous pan (fraction of stage)
-      py: 0.022 * Math.cos(a * 0.47),
-    };
+    return { z: 1.12 + 0.05 * Math.sin(a), px: 0.028 * Math.sin(a * 0.55), py: 0.022 * Math.cos(a * 0.47) };
   }
   function drawSlide(m, k, alpha) {
     if (!srcReady(m)) return;
@@ -360,26 +287,26 @@
     let dw, dh;
     if (ca > ia) { dw = stageW; dh = stageW / ia; } else { dh = stageH; dw = stageH * ia; }
     dw *= k.z; dh *= k.z;
-    const dx = (stageW - dw) / 2 + k.px * stageW;
-    const dy = (stageH - dh) / 2 + k.py * stageH;
-    sx.globalAlpha = alpha; sx.drawImage(m, dx, dy, dw, dh); sx.globalAlpha = 1;
+    sx.globalAlpha = alpha;
+    sx.drawImage(m, (stageW - dw) / 2 + k.px * stageW, (stageH - dh) / 2 + k.py * stageH, dw, dh);
+    sx.globalAlpha = 1;
   }
   function drawText() {
     const cx = stageW / 2, cy = stageH / 2;
     sx.textAlign = "center"; sx.textBaseline = "middle";
-    const hs = Math.round(stageW * 0.085);
+    const hs = Math.max(34, Math.round(stageW * 0.082));   // floors keep it legible on phones
     sx.save();
     sx.shadowColor = "rgba(0,0,0,.38)"; sx.shadowBlur = stageW * 0.013; sx.shadowOffsetY = 2;
     sx.font = `700 ${hs}px "New York", Georgia, "Times New Roman", serif`;
     sx.fillStyle = "#fff"; sx.fillText(HEAD, cx, cy);
     sx.restore();
-    sx.font = `600 ${Math.round(stageW * 0.0145)}px ui-sans-serif, -apple-system, "Segoe UI", sans-serif`;
+    sx.font = `600 ${Math.max(11, Math.round(stageW * 0.0135))}px ui-sans-serif, -apple-system, "Segoe UI", sans-serif`;
     sx.fillStyle = "rgba(255,255,255,.92)";
-    sx.fillText(SUB, cx, cy + hs * 0.72);
+    sx.fillText(stageW < 560 ? SUB_NARROW : SUB, cx, cy + hs * 0.74);
   }
   function renderStage(now) {
     sx.clearRect(0, 0, stageW, stageH);
-    const k = kb(now);                      // one shared transform → seamless cross-fades
+    const k = kb(now);
     if (userBg) {
       drawSlide(userBg, k, 1);
     } else {
@@ -387,9 +314,9 @@
       if (fading) {
         const t = Math.min(1, (now - fadeStart) / FADE);
         drawSlide(slideImgs[nextIdx], k, t);
-        if (t >= 1) { curIdx = nextIdx; fading = false; slideStart = now; updateDock(); }
+        if (t >= 1) { curIdx = nextIdx; fading = false; slideStart = now; updateWalls(); }
       } else if (auto && now - slideStart > HOLD) {
-        nextIdx = (curIdx + 1) % SLIDES.length; fading = true; fadeStart = now; updateDock();
+        nextIdx = (curIdx + 1) % SLIDES.length; fading = true; fadeStart = now; updateWalls();
       }
     }
     drawText();
@@ -397,382 +324,395 @@
   renderStage(performance.now());
   (function stageLoop(){ renderStage(performance.now()); requestAnimationFrame(stageLoop); })();
 
-  /* ?transparent — demo of transparent mode: the page displays the stage canvas
-     ITSELF (crisp, no GL re-sampling) and the engine draws ONLY the lenses on
-     top with premultiplied alpha. This is the mode for refracting a page's own
-     live canvas (e.g. a three.js scene). Default mode: the engine paints the
-     background across the whole GL canvas. */
-  const TRANSPARENT = new URLSearchParams(location.search).has("transparent");
-  if (TRANSPARENT) {
-    // no z-index:-1 — body has its own background (html sets one too, so it
-    // doesn't propagate to the root canvas) and would paint OVER a negative-z
-    // child. DOM order does the layering: stage before #gl = behind the glass.
-    stage.style.cssText = "position:fixed;inset:0;width:100%;height:100%;display:block;";
-    document.body.prepend(stage);
-  }
-  const glass = createGlass({ canvas: canvasEl, background: stage, transparent: TRANSPARENT });
+  /* ===================== the engine ===================== */
+  const glass = createGlass({ canvas: canvasEl, background: stage });
 
-  function updateDock() {
-    const active = fading ? nextIdx : curIdx;
-    scene.querySelectorAll(".dock .th").forEach(b => b.classList.toggle("on", +b.dataset.idx === active));
-  }
-  function goToSlide(idx) {
-    if (userBg || (idx === curIdx && !fading)) return;
-    nextIdx = idx; fading = true; fadeStart = performance.now(); updateDock();
-  }
-  function setDockEnabled(on) {
-    const d = scene.querySelector(".dock");
-    if (!d) return;
-    d.classList.toggle("disabled", !on);
-    d.querySelectorAll(".th").forEach(b => b.disabled = !on);   // also drop keyboard focus/activation
-  }
-
-  /* ===================== glass params ===================== */
-  const DEFAULTS = { blur:12, lens:22, white:0, edge:100, frost:22, disperse:18, vib:120, curve:28, gloss:35, glosssize:50, border:45, radius:30, shadow:35, tint:"light" };
+  const DEFAULTS = { blur:14, lens:18, white:8, edge:110, frost:20, disperse:16, vib:122, curve:30, tint:"light" };
   const P = { ...DEFAULTS, tintRGB:[1,1,1] };
-
-  /* ===================== draggable objects ===================== */
-  const TILES = [
-    { img:"images/pic-1.svg", cap:"Liquid glass",   sub:"WebGL refraction", x:60,  y:80  },
-    { img:"images/pic-2.svg", cap:"Over a photo",   sub:"the bg bends through", x:300, y:610 },
-    { img:"images/pic-3.svg", cap:"Drag me around", sub:"glass tracks the card", x:60,  y:560 },
-  ];
-  const DOCS = [
-    { pill:"THE RECIPE", h:"Glass that refracts", x:440, y:90,
-      p:`The card has <b>no background</b> — the shader behind it samples the photo, <b>bends</b> it through a squircle lens, blurs it, and lights the top edge.` },
-    { pill:"THE PACKAGE", h:"glass-gl", x:820, y:560,
-      p:`A tiny WebGL engine: <code>register()</code> any element and it becomes a real glass lens that refracts the background — not just a <code>backdrop-filter</code> blur. Framework-agnostic, AGPL-3.0.` },
-  ];
-
-  /* "Get it" tile — a tabbed card: install for humans / setup for AI agents */
-  const GETIT = { x:440, y:470 };
-  const getitHTML = `
-    <div class="tabs" role="tablist">
-      <button class="tab on" data-tab="human" role="tab">For humans</button>
-      <button class="tab"    data-tab="ai"    role="tab">For AI</button>
-    </div>
-    <div class="pane" data-pane="human">
-      <p><code>npm i glass-gl</code><br>
-      Then <code>import { createGlass }</code>, point it at a background, and
-      <code>register()</code> your elements. Source &amp; docs:
-      <b>github.com/wiiiimm/glass-gl</b>.</p>
-    </div>
-    <div class="pane" data-pane="ai" hidden>
-      <p>Point Claude Code / Cursor at <b>github.com/wiiiimm/glass-gl</b> — the
-      repo ships an <code>AGENTS.md</code> with the API, limits, and the one
-      rule, so your agent wires up <code>glass-gl</code> correctly.</p>
-    </div>`;
-
-  let zTop = 100;   // dragged blocks jump above the panel/footer (z 50)
-  function make(html, cls, x, y) {
-    const el = document.createElement("div");
-    el.className = `shape ${cls}`;
-    el.style.left = x + "px"; el.style.top = y + "px";
-    el.innerHTML = html; scene.appendChild(el);
-    glass.register(el);            // <-- this element is now liquid glass
-    return el;
-  }
-  const tileHTML = t => `<div class="photo"><img src="${t.img}" alt="" draggable="false"></div>
-      <div class="cap">${t.cap}</div><div class="sub">${t.sub}</div>`;
-  const docHTML = d => `<span class="pill">${d.pill}</span><h3>${d.h}</h3><p>${d.p}</p>`;
-
-  /* simple original stroke icons (minimalist line style) */
-  const ICONS = {
-    home:    `<path d="M4 11 12 4l8 7"/><path d="M6 10v9.5h12V10"/><path d="M9.5 19.5V14h5v5.5"/>`,
-    search:  `<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>`,
-    heart:   `<path d="M20.8 5.7a5 5 0 0 0-7.1 0L12 7.4l-1.7-1.7a5 5 0 1 0-7.1 7.1l1.7 1.7L12 21l7.1-6.5 1.7-1.7a5 5 0 0 0 0-7.1Z"/>`,
-    user:    `<circle cx="12" cy="8.5" r="3.5"/><path d="M5.5 20c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5"/>`,
-    plus:    `<path d="M12 5.5v13M5.5 12h13"/>`,
-    message: `<path d="M20.5 11.5a8 8 0 0 1-11.4 7.2L4 20.5l1.8-5.1A8 8 0 1 1 20.5 11.5Z"/>`,
-  };
-  const iconSVG = (name) =>
-    `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
-  function buildScene() {
-    scene.querySelectorAll(".shape").forEach(s => s.remove());
-    glass.clear();                 // drop stale element refs before re-registering
-    TILES.forEach(t => make(tileHTML(t), "tile", t.x, t.y));
-    DOCS.forEach(d => make(docHTML(d), "doc", d.x, d.y));
-    make(getitHTML, "doc getit", GETIT.x, GETIT.y);
-
-    // 4 glass icon circles (circle = surface registered with radius = half its size)
-    const CIRCLE = ["home", "search", "heart", "user"];
-    const CW = 76, CGAP = 28, cTotal = CIRCLE.length * CW + (CIRCLE.length - 1) * CGAP;
-    const cStart = Math.round((innerWidth - cTotal) / 2);
-    CIRCLE.forEach((n, i) => {
-      const el = make(iconSVG(n), "iconbtn", cStart + i * (CW + CGAP), 44);
-      glass.register(el, { radius: CW / 2 });
-    });
-
-    // iPhone-style bottom app bar — one glass pill with 5 icons
-    const BAR = ["home", "search", "plus", "message", "user"];
-    const BARW = 374, BARH = 66;
-    const bar = make(BAR.map(iconSVG).join(""), "appbar", 60, 378);   // left-middle, just under the first tile
-    glass.register(bar, { radius: BARH / 2 });
-
-    // slide dock — small glass controller with photo thumbnails (bottom-centre)
-    const dockHTML = SLIDES.map((s, i) =>
-      `<button class="th${i === curIdx ? " on" : ""}" data-idx="${i}" title="${s.label}" aria-label="${s.label}"><img src="${s.src}" alt="" draggable="false"></button>`).join("");
-    const dock = make(dockHTML, "dock", 0, 0);
-    glass.register(dock, { radius: 22 });
-    dock.style.left = Math.round((innerWidth - dock.offsetWidth) / 2) + "px";
-    dock.style.top  = (innerHeight - dock.offsetHeight - 24) + "px";
-    if (userBg) setDockEnabled(false);
-
-    applyDOM();
-    applyGloss();
-    // the UI chrome is WebGL glass too — register with their own corner radii
-    glass.register(document.querySelector(".panel"), { radius: 22 });
-    glass.register(document.querySelector(".hint"),  { radius: 12 });
-  }
-
-  /* delegated clicks (survive scene rebuilds): Get-it tabs + slide dock */
-  scene.addEventListener("click", (e) => {
-    const th = e.target.closest(".dock .th");
-    if (th) { goToSlide(+th.dataset.idx); return; }
-    const tab = e.target.closest(".getit .tab"); if (!tab) return;
-    const card = tab.closest(".getit");
-    card.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t === tab));
-    card.querySelectorAll(".pane").forEach(p => p.hidden = p.dataset.pane !== tab.dataset.tab);
-  });
-
-  /* ===================== dragging ===================== */
-  let drag = null;
-  scene.addEventListener("pointerdown", (e) => {
-    if (e.target.closest("input, button, a, .dial")) return;   // don't hijack controls / links
-    const s = e.target.closest(".shape, .panel, .hint"); if (!s) return;
-    const r = s.getBoundingClientRect();                        // pin to left/top (works for the fixed panel & footer)
-    s.style.left = r.left + "px"; s.style.top = r.top + "px";
-    s.style.right = "auto"; s.style.bottom = "auto";
-    s.style.zIndex = ++zTop; s.classList.add("dragging");
-    s.setPointerCapture(e.pointerId);
-    drag = { s, dx: e.clientX - r.left, dy: e.clientY - r.top };
-  });
-  scene.addEventListener("pointermove", (e) => {
-    if (!drag) return; const { s } = drag;
-    const mx = innerWidth - s.offsetWidth - 4, my = innerHeight - s.offsetHeight - 4;
-    s.style.left = Math.min(Math.max(e.clientX - drag.dx, 4), mx) + "px";
-    s.style.top  = Math.min(Math.max(e.clientY - drag.dy, 4), my) + "px";
-  });
-  const endDrag = () => { if (drag) { drag.s.classList.remove("dragging"); drag = null; } };
-  scene.addEventListener("pointerup", endDrag);
-  scene.addEventListener("pointercancel", endDrag);
-
-  /* ===================== controls ===================== */
-  const $ = id => document.getElementById(id);
-  const C = {
-    blur:  { el:$("s-blur"),  out:$("v-blur"),  fmt:v=>v+"px" },
-    lens:  { el:$("s-lens"),  out:$("v-lens"),  fmt:v=>(v/100).toFixed(2) },
-    white: { el:$("s-white"), out:$("v-white"), fmt:v=>v==0?"off":(v/100).toFixed(2) },
-    edge:  { el:$("s-edge"),  out:$("v-edge"),  fmt:v=>(v/100).toFixed(2)+"×" },
-    frost: { el:$("s-frost"), out:$("v-frost"), fmt:v=>v==0?"off":(v/100).toFixed(2) },
-    disperse:{ el:$("s-disperse"), out:$("v-disperse"), fmt:v=>v==0?"off":(v/100).toFixed(2) },
-    vib:   { el:$("s-vib"),   out:$("v-vib"),   fmt:v=>v==100?"off":(v/100).toFixed(2)+"×" },
-    curve: { el:$("s-curve"), out:$("v-curve"), fmt:v=>(v/10).toFixed(1) },
-    gloss: { el:$("s-gloss"), out:$("v-gloss"), fmt:v=>v==0?"off":(v/100).toFixed(2) },
-    glosssize:{ el:$("s-glosssize"), out:$("v-glosssize"), fmt:v=>(v/100).toFixed(2) },
-    border:{ el:$("s-border"),out:$("v-border"),fmt:v=>(v/100).toFixed(2) },
-    radius:{ el:$("s-radius"),out:$("v-radius"),fmt:v=>v+"px" },
-    shadow:{ el:$("s-shadow"),out:$("v-shadow"),fmt:v=>(v/100).toFixed(2) },
-  };
-  function applyDOM() {
-    document.querySelectorAll(".shape").forEach(s => {
-      s.style.setProperty("--border", P.border/100);
-      s.style.setProperty("--radius", P.radius + "px");
-      s.style.setProperty("--shadow", P.shadow/100);
-    });
-  }
-  function readSlider(key) {
-    const c = C[key]; P[key] = +c.el.value; c.out.textContent = c.fmt(+c.el.value);
-  }
-  Object.keys(C).forEach(key => {
-    C[key].el.addEventListener("input", () => {
-      readSlider(key);
-      if (key === "border" || key === "radius" || key === "shadow") applyDOM();
-      if (key === "gloss" || key === "glosssize") applyGloss();
-      pushParams();
-    });
-  });
-
-  /* gloss overlay (CSS, sits OVER tile content incl. images) + angle dial */
-  let glossAngle = 35;
-  function applyGloss() {
-    const ga = (glossAngle + 180) % 360;   // bright edge points toward the dial handle
-    document.querySelectorAll(".shape").forEach(s => {
-      s.style.setProperty("--gloss-strength", P.gloss / 100);
-      s.style.setProperty("--gloss-size", P.glosssize + "%");
-      s.style.setProperty("--gloss-angle", ga + "deg");
-    });
-  }
-  const glossDial = $("glossDial"), glossHandle = glossDial.querySelector(".dial-handle");
-  function setGlossAngle(deg) {
-    glossAngle = ((deg % 360) + 360) % 360;
-    glossHandle.style.setProperty("--a", glossAngle + "deg");
-    $("v-glossangle").textContent = Math.round(glossAngle) + "°";
-    applyGloss();
-    glass.setParams({ lightAngle: glossAngle });   // one light: CSS gloss + shader rim glint
-  }
-  let dialDrag = false;
-  function dialFromEvent(e) {
-    const r = glossDial.getBoundingClientRect();
-    const deg = Math.atan2(e.clientY - (r.top + r.height/2), e.clientX - (r.left + r.width/2)) * 180 / Math.PI + 90;
-    setGlossAngle(deg);
-  }
-  glossDial.addEventListener("pointerdown", e => { dialDrag = true; glossDial.setPointerCapture(e.pointerId); dialFromEvent(e); });
-  glossDial.addEventListener("pointermove", e => { if (dialDrag) dialFromEvent(e); });
-  glossDial.addEventListener("pointerup", () => dialDrag = false);
-
-  function setTint(mode) {
-    P.tint = mode;
-    P.tintRGB = mode === "dark" ? [0.04,0.05,0.09] : [1,1,1];
-    $("t-light").classList.toggle("on", mode === "light");
-    $("t-dark").classList.toggle("on", mode === "dark");
-    document.querySelectorAll(".shape").forEach(s => s.classList.toggle("dark", mode === "dark"));
-    pushParams();
-  }
-  $("t-light").onclick = () => setTint("light");
-  $("t-dark").onclick = () => setTint("dark");
-
-  const ADDIMGS = ["images/pic-1.svg","images/pic-2.svg","images/pic-3.svg","images/pic-4.svg","images/avatar.png"];
-  let addN = 0;
-  $("add").onclick = () => {
-    const t = { img: ADDIMGS[addN % ADDIMGS.length], cap:"New glass tile", sub:"#" + (addN+1),
-                x: 90 + (addN*43) % Math.max(140, innerWidth - 700),
-                y: 90 + (addN*61) % Math.max(140, innerHeight - 360) };
-    const el = make(tileHTML(t), "tile", t.x, t.y); addN++;
-    el.style.zIndex = ++zTop;
-    if (P.tint === "dark") el.classList.add("dark");
-    applyDOM(); applyGloss();
-  };
-
-  /* presets — "Clear" = crystal-clear see-through glass (no blur, no milk,
-     light refraction); "Frosted" = heavy blur; "Liquid" = strong lens. */
-  const PRESETS = {
-    clear:   { blur:0,  lens:16, white:0,  edge:40,  frost:0,  disperse:22, vib:120, curve:28 },
-    frosted: { blur:28, lens:10, white:23, edge:35,  frost:6,  disperse:8,  vib:112, curve:20 },
-    liquid:  { blur:10, lens:32, white:16, edge:140, frost:30, disperse:35, vib:132, curve:33 },
-  };
-  function applyPreset(name) {
-    const pre = PRESETS[name]; if (!pre) return;
-    Object.assign(P, pre);
-    ["blur","lens","white","edge","frost","disperse","vib","curve"].forEach(k => { C[k].el.value = P[k]; readSlider(k); });
-    pushParams();
-    document.querySelectorAll("[data-preset]").forEach(b =>
-      b.classList.toggle("on", b.dataset.preset === name));
-  }
-  document.querySelectorAll("[data-preset]").forEach(b =>
-    b.onclick = () => applyPreset(b.dataset.preset));
-
-  /* push the panel's values into the engine (slider units → engine params). */
   function pushParams() {
     glass.setParams({
       blur:       P.blur / 10,
       refraction: P.lens / 100,
-      liquidness: Math.max(P.white / 100, P.tint === "dark" ? 0.35 : 0),  // dark glass needs a tint floor to show
+      liquidness: Math.max(P.white / 100, P.tint === "dark" ? 0.35 : 0),
       edgeLight:  P.edge / 100,
       edgeFrost:  P.frost / 100,
       dispersion: P.disperse / 100,
       saturation: P.vib / 100,
       curve:      P.curve / 10,
-      radius:     P.radius,
+      lightAngle: 35,
       tint:       P.tintRGB,
     });
   }
+  pushParams();
 
-  function resetAll() {
-    Object.assign(P, DEFAULTS);
-    Object.keys(C).forEach(key => { C[key].el.value = P[key]; readSlider(key); });
-    setTint(DEFAULTS.tint);
-    pushParams();
-    buildScene();
-    setGlossAngle(35);
+  /* ===================== apps (windows = pages) ===================== */
+  const ICONS = {
+    about:    `<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5h.01"/>`,
+    how:      `<path d="M12 3 3 8l9 5 9-5Z"/><path d="m4.5 12.3 7.5 4.2 7.5-4.2"/><path d="m4.5 16.3 7.5 4.2 7.5-4.2"/>`,
+    skills:   `<path d="M12 4l1.8 4.7 4.7 1.8-4.7 1.8L12 17l-1.8-4.7-4.7-1.8 4.7-1.8Z"/><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z"/>`,
+    wallpapers:`<rect x="3.5" y="5" width="17" height="14" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m5 17 4.5-4 3.5 3 2.5-2 4 3.5"/>`,
+    settings: `<path d="M4 7h9M18 7h2M4 17h3M12 17h8"/><circle cx="15.5" cy="7" r="2.5"/><circle cx="9.5" cy="17" r="2.5"/>`,
+    terminal: `<rect x="3" y="4.5" width="18" height="15" rx="3"/><path d="m7 9.5 3 2.5-3 2.5"/><path d="M12.5 15H17"/>`,
+  };
+  const iconSVG = n =>
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
+
+  const tabsHTML = (a, b) => `
+    <div class="tabs" role="tablist">
+      <button class="tab on" data-tab="human" role="tab">${a}</button>
+      <button class="tab"    data-tab="ai"    role="tab">${b}</button>
+    </div>`;
+
+  const APPS = {
+    about: { title: "About glassOS", w: 390, fx: .26, fy: .13, html: `
+      <p class="lead">A tiny desktop where <b>every surface is real glass</b> — this window,
+      the menu bar, the dock. Each is a plain DOM element registered with
+      <b>glass-gl</b>, and one WebGL shader refracts the wallpaper through all of them, live.</p>
+      <ul>
+        <li><b>Drag a window</b> by its title bar — the lens tracks it every frame.</li>
+        <li>The wallpaper is a <b>live canvas</b>: a Ken Burns slideshow with the wordmark
+          baked in, so the glass bends the photo <i>and</i> the text.</li>
+        <li>Slide two windows together — their lenses <b>merge like droplets</b>.</li>
+        <li>Open <b>Settings</b> to retune the material, or <b>Wallpapers</b> to change the scene.</li>
+      </ul>
+      <p class="dim">AGPL-3.0 · <a href="https://github.com/wiiiimm/glass-gl" target="_blank" rel="noopener noreferrer">github.com/wiiiimm/glass-gl</a>
+      · prefer sliders for everything? <a href="playground.html">open the parameter playground →</a></p>` },
+
+    how: { title: "How it works", w: 430, fx: .30, fy: .34, html: `
+      <p>glass-gl runs <b>one fullscreen WebGL canvas</b> behind the page. Every frame it reads
+      each registered element's screen rect and draws a lens there:</p>
+      <ol>
+        <li><b>Rounded-box SDF</b> — the glass shape and its distance field</li>
+        <li><b>Droplet refraction</b> — optically flat centre, steep bend at the rim (<code>curve</code>)</li>
+        <li><b>Blur</b> — 9×9 box sample of the backdrop (<code>blur</code>)</li>
+        <li><b>Chromatic dispersion</b> — R/B split hugging the rim; white edges break into colour (<code>dispersion</code>)</li>
+        <li><b>Vibrancy</b> — saturate the refracted backdrop (<code>saturation</code>)</li>
+        <li><b>Rim glint</b> — directional specular from the SDF normal (<code>edgeLight</code> + <code>lightAngle</code>)</li>
+      </ol>
+      <p><b>The one rule:</b> it refracts a <b>background you give it</b> (image / canvas / video)
+      — never live DOM. Content sits <i>on</i> the glass; to bend text, bake it into the
+      background canvas — exactly how this wallpaper's wordmark bends under the windows.</p>
+      <p class="dim">Want a frosted panel over live scrolling content instead? That's CSS
+      <code>backdrop-filter</code>'s job. glass-gl is for glass over media.</p>` },
+
+    skills: { title: "Skills & install", w: 420, fx: .68, fy: .18, html: tabsHTML("For humans", "For AI agents") + `
+      <div class="pane" data-pane="human">
+        <p><b>Install the library</b></p>
+        <pre class="code">npm i glass-gl</pre>
+        <p>or straight off a CDN, no build step:</p>
+        <pre class="code">import { createGlass } from "https://esm.sh/glass-gl";</pre>
+        <p><b>Teach your coding agent</b> — glass-gl ships as an installable agent skill
+        (Claude Code, Cursor, Copilot CLI, …):</p>
+        <pre class="code">npx skills add wiiiimm/glass-gl</pre>
+        <p class="dim">The skill hands your agent the one rule, the full API, every parameter,
+        and the gotchas — so it wires the effect correctly on the first try.</p>
+      </div>
+      <div class="pane" data-pane="ai" hidden>
+        <p>Reading this as an agent? The whole recipe:</p>
+        <pre class="code">import { createGlass } from "https://esm.sh/glass-gl";
+
+const glass = createGlass({ canvas, background: "/bg.jpg" });
+glass.register(el, { radius: 20 });  // match border-radius
+glass.setParams({
+  refraction: .2,  blur: 1.2,  dispersion: .18,
+  saturation: 1.2, curve: 2.8,
+  edgeLight: 1.1,  lightAngle: 35,
+});</pre>
+        <p><b>The one rule:</b> the shader refracts only the background texture you provide —
+        put content <i>on</i> the glass; bake text into a background canvas; pass a
+        <code>&lt;canvas&gt;</code>/<code>&lt;video&gt;</code> for live refraction. Max 16 surfaces.</p>
+        <p class="dim">Full reference: <code>skills/glass-gl/SKILL.md</code> in the repo — or install it,
+        <code>npx skills add wiiiimm/glass-gl</code>.</p>
+      </div>` },
+
+    wallpapers: { title: "Wallpapers", w: 400, fx: .40, fy: .40, html: `
+      <p class="dim" style="margin-top:6px">Pick a scene — the slideshow cross-fades to it. Every
+      window keeps refracting the new wallpaper.</p>
+      <div class="walls" id="walls">${SLIDES.map((s, i) =>
+        `<button data-idx="${i}" title="${s.label}" aria-label="${s.label}"><img src="${s.src}" alt="" draggable="false"></button>`).join("")}
+      </div>
+      <input type="file" id="bgFile" accept="image/*,video/*" style="display:none">
+      <button class="btn" id="bgBtn">Upload your own (image / video)…</button>
+      <button class="btn" id="bgClear" style="display:none">Clear — resume slideshow</button>` },
+
+    settings: { title: "Glass settings", w: 300, fx: .82, fy: .14, html: `
+      <div class="toggles" style="margin-top:8px">
+        <button class="toggle" data-preset="clear">Clear</button>
+        <button class="toggle on" data-preset="os">glassOS</button>
+        <button class="toggle" data-preset="liquid">Liquid</button>
+      </div>
+      <div class="ctrl"><div class="row"><label>Blur</label><span class="val" id="v-blur"></span></div>
+        <input type="range" id="s-blur" min="0" max="30" step="1"></div>
+      <div class="ctrl"><div class="row"><label>Refraction</label><span class="val" id="v-lens"></span></div>
+        <input type="range" id="s-lens" min="0" max="50" step="1"></div>
+      <div class="ctrl"><div class="row"><label>Edge light</label><span class="val" id="v-edge"></span></div>
+        <input type="range" id="s-edge" min="0" max="200" step="5"></div>
+      <div class="ctrl"><div class="row"><label>Chromatic</label><span class="val" id="v-disperse"></span></div>
+        <input type="range" id="s-disperse" min="0" max="100" step="2"></div>
+      <div class="ctrl"><div class="row"><label>Vibrance</label><span class="val" id="v-vib"></span></div>
+        <input type="range" id="s-vib" min="80" max="170" step="5"></div>
+      <div class="ctrl"><div class="row"><label>Lens profile</label><span class="val" id="v-curve"></span></div>
+        <input type="range" id="s-curve" min="10" max="40" step="1"></div>
+      <div class="toggles">
+        <button class="toggle on" id="t-light">Light glass</button>
+        <button class="toggle" id="t-dark">Dark glass</button>
+      </div>
+      <button class="btn" id="resetBtn">Reset</button>` },
+
+    terminal: { title: "Terminal — get glass-gl", w: 440, fx: .17, fy: .64, cls: "terminal", html: `
+      <pre class="term"><span id="termText"></span><span class="cursor">▌</span></pre>` },
+  };
+
+  /* dock — app buttons + a divider + a link out to the parameter playground */
+  const dock = document.getElementById("dock");
+  dock.innerHTML = Object.keys(APPS).map(id =>
+    `<button data-app="${id}" title="${APPS[id].title}" aria-label="${APPS[id].title}">${iconSVG(id)}</button>`).join("")
+    + `<span class="sep" aria-hidden="true"></span>
+       <a href="playground.html" title="Parameter playground" aria-label="Parameter playground">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3h4"/><path d="M10 3v5.2L4.8 17a2.6 2.6 0 0 0 2.3 3.8h9.8a2.6 2.6 0 0 0 2.3-3.8L14 8.2V3"/><path d="M7.3 14.5h9.4"/></svg>
+       </a>`;
+
+  /* ===================== window manager ===================== */
+  const wins = {};       // id -> element
+  let zTop = 100;
+  const isPhone = () => window.innerWidth < 720;
+
+  function clampWin(el) {
+    const w = el.offsetWidth, h = el.offsetHeight;
+    const x = Math.min(Math.max(parseFloat(el.style.left) || 10, 10), Math.max(10, innerWidth - w - 10));
+    const y = Math.min(Math.max(parseFloat(el.style.top) || 62, 62), Math.max(62, innerHeight - Math.min(h, 120) - 10));
+    el.style.left = x + "px"; el.style.top = y + "px";
   }
-  $("reset").onclick = resetAll;
+  function focusWin(el) { el.style.zIndex = ++zTop; }
 
-  /* ===================== copy settings ===================== */
-  function settingsText() {
-    const f = n => +n.toFixed(2);
-    const e = {
-      blur:       f(P.blur / 10),
-      refraction: f(P.lens / 100),
-      liquidness: f(P.white / 100),
-      edgeLight:  f(P.edge / 100),
-      edgeFrost:  f(P.frost / 100),
-      dispersion: f(P.disperse / 100),
-      saturation: f(P.vib / 100),
-      curve:      f(P.curve / 10),
-      lightAngle: Math.round(glossAngle),
-      radius:     P.radius,
-      tint:       P.tintRGB,
+  let cascade = 0;
+  function buildWin(id) {
+    const app = APPS[id];
+    const el = document.createElement("section");
+    el.className = "win" + (app.cls ? " " + app.cls : "");
+    el.dataset.app = id;
+    el.style.setProperty("--w", app.w + "px");
+    el.innerHTML = `
+      <div class="win-title">
+        <div class="lights">
+          <button class="r" data-act="close" aria-label="Close"></button>
+          <button class="y" data-act="close" aria-label="Minimise"></button>
+          <button class="g" data-act="max"   aria-label="Maximise"></button>
+        </div>
+        <span class="name">${app.title}</span>
+      </div>
+      <div class="win-body">${app.html}</div>`;
+    desktop.appendChild(el);
+    if (isPhone()) {
+      el.style.left = "10px";
+      el.style.top = (62 + (cascade % 3) * 20) + "px";
+    } else {
+      el.style.left = Math.round(innerWidth  * app.fx - el.offsetWidth / 2 + (cascade % 4) * 18) + "px";
+      el.style.top  = Math.round(innerHeight * app.fy + (cascade % 4) * 14) + "px";
+    }
+    cascade++;
+    clampWin(el);
+    if (app.init) app.init(el);
+    return el;
+  }
+  function openApp(id) {
+    if (!APPS[id]) return;
+    const el = wins[id] || (wins[id] = buildWin(id));
+    if (el.style.display === "none") el.style.display = "";
+    glass.register(el, { radius: 20 });
+    focusWin(el);
+    dock.querySelector(`[data-app="${id}"]`).classList.add("on");
+    history.replaceState(null, "", "#" + id);
+  }
+  function closeApp(el) {
+    el.style.display = "none";
+    el.classList.remove("max");
+    glass.unregister(el);
+    dock.querySelector(`[data-app="${el.dataset.app}"]`).classList.remove("on");
+  }
+
+  desktop.addEventListener("click", (e) => {
+    const appBtn = e.target.closest("[data-app]");
+    if (appBtn && (appBtn.closest(".dock") || appBtn.closest(".menus"))) { openApp(appBtn.dataset.app); return; }
+    const act = e.target.closest("[data-act]");
+    if (act) {
+      const win = act.closest(".win");
+      if (act.dataset.act === "close") closeApp(win);
+      else { win.classList.toggle("max"); focusWin(win); }
+      return;
+    }
+    const tab = e.target.closest(".tab");
+    if (tab) {
+      const body = tab.closest(".win-body");
+      body.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t === tab));
+      body.querySelectorAll(".pane").forEach(p => p.hidden = p.dataset.pane !== tab.dataset.tab);
+    }
+  });
+
+  /* drag windows by the title bar */
+  let drag = null;
+  desktop.addEventListener("pointerdown", (e) => {
+    const win = e.target.closest(".win");
+    if (win) focusWin(win);
+    if (e.target.closest("button, a, input")) return;
+    const ttl = e.target.closest(".win-title");
+    if (!ttl || win.classList.contains("max")) return;
+    const r = win.getBoundingClientRect();
+    win.classList.add("dragging");
+    win.setPointerCapture(e.pointerId);
+    drag = { win, dx: e.clientX - r.left, dy: e.clientY - r.top };
+  });
+  desktop.addEventListener("pointermove", (e) => {
+    if (!drag) return; const { win } = drag;
+    win.style.left = Math.min(Math.max(e.clientX - drag.dx, 10), Math.max(10, innerWidth - win.offsetWidth - 10)) + "px";
+    win.style.top  = Math.min(Math.max(e.clientY - drag.dy, 52), Math.max(52, innerHeight - 80)) + "px";
+  });
+  const endDrag = () => { if (drag) { drag.win.classList.remove("dragging"); drag = null; } };
+  desktop.addEventListener("pointerup", endDrag);
+  desktop.addEventListener("pointercancel", endDrag);
+
+  window.addEventListener("resize", () => {
+    sizeStage();
+    document.querySelectorAll(".win").forEach(clampWin);
+  });
+
+  /* ===================== settings app ===================== */
+  const FMT = {
+    blur: v => v + "px", lens: v => (v/100).toFixed(2), edge: v => (v/100).toFixed(2) + "×",
+    disperse: v => v == 0 ? "off" : (v/100).toFixed(2),
+    vib: v => v == 100 ? "off" : (v/100).toFixed(2) + "×", curve: v => (v/10).toFixed(1),
+  };
+  const PRESETS = {
+    clear:  { blur:0,  lens:16, white:0,  edge:40,  frost:0,  disperse:22, vib:120, curve:28 },
+    os:     { ...DEFAULTS },
+    liquid: { blur:10, lens:32, white:16, edge:140, frost:30, disperse:35, vib:132, curve:33 },
+  };
+  APPS.settings.init = (el) => {
+    const $ = id => el.querySelector("#" + id);
+    const KEYS = ["blur","lens","edge","disperse","vib","curve"];
+    const sync = () => KEYS.forEach(k => { $("s-"+k).value = P[k]; $("v-"+k).textContent = FMT[k](P[k]); });
+    KEYS.forEach(k => $("s-"+k).addEventListener("input", () => {
+      P[k] = +$("s-"+k).value; $("v-"+k).textContent = FMT[k](P[k]); pushParams();
+      el.querySelectorAll("[data-preset]").forEach(b => b.classList.remove("on"));
+    }));
+    el.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => {
+      Object.assign(P, PRESETS[b.dataset.preset]); sync(); pushParams();
+      el.querySelectorAll("[data-preset]").forEach(x => x.classList.toggle("on", x === b));
+    });
+    const setTint = (mode) => {
+      P.tint = mode; P.tintRGB = mode === "dark" ? [0.04,0.05,0.09] : [1,1,1];
+      $("t-light").classList.toggle("on", mode === "light");
+      $("t-dark").classList.toggle("on", mode === "dark");
+      pushParams();
     };
-    const snippet = `glass.setParams(${JSON.stringify(e)});`;
-    return [
-      "glass-gl settings",
-      `  blur        ${e.blur}`,
-      `  refraction  ${e.refraction}`,
-      `  liquidness  ${e.liquidness}`,
-      `  edgeLight   ${e.edgeLight}`,
-      `  edgeFrost   ${e.edgeFrost}`,
-      `  dispersion  ${e.dispersion}`,
-      `  saturation  ${e.saturation}   curve ${e.curve}   lightAngle ${e.lightAngle}°`,
-      `  gloss       ${f(P.gloss/100)}  size ${P.glosssize}%  angle ${Math.round(glossAngle)}°  (CSS overlay)`,
-      `  radius      ${e.radius}px`,
-      `  tint        ${P.tint} [${P.tintRGB.join(", ")}]`,
-      `  border      ${f(P.border / 100)}   shadow ${f(P.shadow / 100)}`,
-      "",
-      snippet,
-    ].join("\n");
+    $("t-light").onclick = () => setTint("light");
+    $("t-dark").onclick = () => setTint("dark");
+    $("resetBtn").onclick = () => {
+      Object.assign(P, DEFAULTS); setTint("light"); sync(); pushParams();
+      el.querySelectorAll("[data-preset]").forEach(x => x.classList.toggle("on", x.dataset.preset === "os"));
+    };
+    sync();
+  };
+
+  /* ===================== wallpapers app ===================== */
+  function updateWalls() {
+    const el = wins.wallpapers; if (!el) return;
+    const active = fading ? nextIdx : curIdx;
+    el.querySelectorAll(".walls button").forEach(b => b.classList.toggle("on", +b.dataset.idx === active));
   }
-  function copyText(text) {
-    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
-    const ta = document.createElement("textarea");        // http / non-secure fallback
-    ta.value = text; ta.style.position = "fixed"; ta.style.top = "-1000px"; ta.style.opacity = "0";
-    document.body.appendChild(ta); ta.focus(); ta.select();
-    let ok = false; try { ok = document.execCommand("copy"); } catch (err) {}
-    document.body.removeChild(ta);
-    return ok ? Promise.resolve() : Promise.reject();
-  }
-  /* upload an image OR video to override the slideshow; clear to resume it */
-  let userBgURL = null;                       // object URL we own → must revoke
+  let userBgURL = null;
   function freeUserBg() {
     if (userBg instanceof HTMLVideoElement) { userBg.pause(); userBg.removeAttribute("src"); userBg.load(); }
     if (userBgURL) { URL.revokeObjectURL(userBgURL); userBgURL = null; }
     userBg = null;
   }
-  $("bgBtn").onclick = () => $("bgFile").click();
-  $("bgFile").addEventListener("change", (e) => {
-    const file = e.target.files && e.target.files[0];
-    e.target.value = "";                      // let re-selecting the same file fire change
-    if (!file) return;
-    freeUserBg();                             // release any previous upload first
-    userBgURL = URL.createObjectURL(file);
-    if (file.type.startsWith("video")) {
-      const v = document.createElement("video");
-      v.src = userBgURL; v.loop = v.muted = v.playsInline = v.autoplay = true;
-      v.play().catch(() => {});
-      userBg = v;
-    } else {
-      const im = new Image(); im.src = userBgURL; userBg = im;
-    }
-    auto = false; fading = false; slideStart = performance.now();
-    setDockEnabled(false); $("bgClear").style.display = "";
-  });
-  $("bgClear").onclick = () => {
-    freeUserBg(); auto = true; slideStart = performance.now();
-    setDockEnabled(true); updateDock(); $("bgClear").style.display = "none";
+  APPS.wallpapers.init = (el) => {
+    const $ = id => el.querySelector("#" + id);
+    $("walls").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-idx]"); if (!b || userBg) return;
+      const idx = +b.dataset.idx;
+      if (idx === curIdx && !fading) return;
+      nextIdx = idx; fading = true; fadeStart = performance.now(); updateWalls();
+    });
+    $("bgBtn").onclick = () => $("bgFile").click();
+    $("bgFile").addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (!file) return;
+      freeUserBg();
+      userBgURL = URL.createObjectURL(file);
+      if (file.type.startsWith("video")) {
+        const v = document.createElement("video");
+        v.src = userBgURL; v.loop = v.muted = v.playsInline = v.autoplay = true;
+        v.play().catch(() => {});
+        userBg = v;
+      } else {
+        const im = new Image(); im.src = userBgURL; userBg = im;
+      }
+      auto = false; fading = false;
+      $("walls").classList.add("disabled");
+      $("bgClear").style.display = "";
+    });
+    $("bgClear").onclick = () => {
+      freeUserBg(); auto = true; slideStart = performance.now();
+      $("walls").classList.remove("disabled"); updateWalls();
+      $("bgClear").style.display = "none";
+    };
+    updateWalls();
   };
 
-  $("copy").onclick = () => {
-    const btn = $("copy"), label = "Copy settings";
-    copyText(settingsText())
-      .then(() => { btn.textContent = "Copied ✓"; })
-      .catch(() => { btn.textContent = "Copy failed — press ⌘C"; })
-      .finally(() => setTimeout(() => { btn.textContent = label; }, 1500));
+  /* ===================== terminal app ===================== */
+  APPS.terminal.init = (el) => {
+    const out = el.querySelector("#termText");
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const LINES = [
+      { cmd: "npm i glass-gl", out: ["", "added 1 package in 412ms", ""] },
+      { cmd: "npx skills add wiiiimm/glass-gl", out: ["", "✔ installed skill: glass-gl", "  your agent now knows the one rule:", "  glass bends the background, not the page", ""] },
+    ];
+    (async () => {
+      while (document.body.contains(el)) {
+        out.textContent = "";
+        for (const l of LINES) {
+          out.textContent += "glassos % ";
+          await wait(500);
+          for (const ch of l.cmd) { out.textContent += ch; await wait(34 + Math.random() * 46); }
+          await wait(420);
+          out.textContent += "\n" + l.out.join("\n") + "\n";
+          await wait(1100);
+        }
+        out.textContent += "glassos % ";
+        await wait(6000);
+      }
+    })();
   };
 
-  /* init — glass-gl owns its render loop + resize; we just drive params + shapes */
-  resetAll();
-  applyPreset("clear");   // default to the Clear look on load
+  /* ===================== boot ===================== */
+  // OS chrome is glass too
+  glass.register(document.getElementById("menubar"), { radius: 14 });
+  glass.register(dock, { radius: 26 });
+
+  // live menu-bar clock
+  const clock = document.getElementById("clock");
+  const tick = () => {
+    const d = new Date();
+    const date = d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+    const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    clock.innerHTML = `<span class="date">${date}&nbsp;&nbsp;</span>${time}`;   // date hides on phones
+  };
+  tick(); setInterval(tick, 1000);
+
+  // open from #hash deep-link, else a welcoming default set
+  const hashApp = location.hash.slice(1);
+  if (APPS[hashApp]) {
+    openApp(hashApp);
+  } else if (isPhone()) {
+    openApp("about");
+  } else {
+    openApp("terminal");
+    openApp("skills");
+    openApp("about");
+  }
   </script>
 </body>
 </html>
