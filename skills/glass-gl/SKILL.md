@@ -16,7 +16,7 @@ description: >-
 fullscreen `<canvas>` behind the page and draws a refracting lens at each element you
 register, every frame — so the glass tracks elements as they move, drag, or resize.
 
-- npm: **`glass-gl`** · repo: **https://github.com/wiiiimm/glass-gl** · MIT · ESM, zero deps
+- npm: **`glass-gl`** · repo: **https://github.com/wiiiimm/glass-gl** · AGPL-3.0 · ESM, zero deps
 - Status: **experimental** (API/visuals may change)
 
 ## The one rule (read this first)

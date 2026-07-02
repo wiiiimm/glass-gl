@@ -23,6 +23,13 @@
  * paints the background across the whole canvas (glass over a media backdrop).
  *
  * The effect needs a background to bend — that's the one rule of this technique.
+ *
+ * Copyright (C) 2026 wiiiimm
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ * This program is free software: you can redistribute it and/or modify it under
+ * the terms of the GNU Affero General Public License as published by the Free
+ * Software Foundation, either version 3 of the License, or (at your option) any
+ * later version. See the bundled LICENSE file. Distributed WITHOUT ANY WARRANTY.
  */
 
 const MAX = 16; // max simultaneous glass surfaces (shader array size)

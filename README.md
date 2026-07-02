@@ -111,4 +111,6 @@ see `AGENTS.md` and `.claude/skills/` for that setup when it's needed.
 
 ## License
 
-MIT © wiiiimm
+AGPL-3.0-or-later © wiiiimm — see [LICENSE](LICENSE). If you run a modified version
+as part of a network service, the AGPL requires you to offer its source to users.
+(Versions ≤ 0.0.2 were published under MIT and remain so.)

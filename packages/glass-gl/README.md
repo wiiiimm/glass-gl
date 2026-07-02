@@ -99,4 +99,6 @@ npx skills add wiiiimm/glass-gl
 
 ## License
 
-MIT © wiiiimm · https://github.com/wiiiimm/glass-gl
+AGPL-3.0-or-later © wiiiimm · https://github.com/wiiiimm/glass-gl — see the bundled
+LICENSE. If you run a modified version as part of a network service, the AGPL requires
+you to offer its source to users. (Versions ≤ 0.0.2 were published under MIT.)
