@@ -4,7 +4,7 @@ Real **WebGL liquid glass** for the web — a tiny, framework-agnostic engine th
 any DOM element refract the background behind it like a physical glass lens (bend +
 magnify + frost + edge light), not just a `backdrop-filter` blur.
 
-![glassOS — a desktop made of glass-gl surfaces: menu bar, dock, and draggable app windows refracting a floral wallpaper with the glassOS wordmark baked in](docs/playground.jpg)
+![glassOS — a desktop made of glass-gl surfaces: menu bar, dock, and draggable app windows (including the Spotify Music and YouTube Video apps) refracting a floral wallpaper with the glassOS wordmark baked in](docs/playground.jpg)
 
 > **⚠️ Experimental.** Early and evolving — the API, parameters, and visuals may change
 > without notice, and it isn't production-hardened yet. The engine works; packaging and a
