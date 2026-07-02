@@ -71,13 +71,19 @@ gotchas). It references the engine by npm/CDN, so there's no second copy to drif
 
 ## Demo
 
-`playground/index.html` is an interactive playground (drag glass cards over a photo, tune
-every parameter live). It is itself a consumer of `glass-gl.js` — the same engine you'd
-install.
+The `playground/` directory ships two demos, both plain consumers of the same `glass-gl.js`
+you'd install:
+
+- **`index.html` — the parameter playground.** Drag glass cards over a photo and tune every
+  parameter live (presets, sliders, copy-as-code).
+- **`os.html` — glassOS.** A tiny responsive desktop where *everything* is glass: menu bar,
+  dock, draggable app windows. The windows are pages — About, How it works, Skills & install
+  (with "For humans / For AI agents" tabs), Wallpapers, Settings, and a Terminal.
 
 ```bash
 cd playground && python3 -m http.server 8000
-# open http://localhost:8000
+# open http://localhost:8000        (playground)
+# open http://localhost:8000/os.html  (glassOS)
 ```
 
 ## Releasing

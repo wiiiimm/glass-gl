@@ -11,8 +11,9 @@ edge-light), not just a `backdrop-filter` blur. Status: **experimental**.
 
 The repo ships:
 - **The engine** — `packages/glass-gl/` (the npm package, name `glass-gl`).
-- **An interactive playground** — `playground/` — drag glass cards over a photo and tune every
-  parameter live. It is a *consumer* of the engine (proves the library works).
+- **Interactive demos** — `playground/` — `index.html` (drag glass cards over a photo, tune every
+  parameter live) and `os.html` (**glassOS**, a responsive desktop made entirely of glass). Both
+  are *consumers* of the engine (they prove the library works).
 
 > Naming is settled: the product/package is **`glass-gl`** (repo `wiiiimm/glass-gl`). The local
 > folder is still named `glass-ui-kit` for historical reasons — that's fine, it doesn't matter.
@@ -52,8 +53,9 @@ include `dispersion`, `saturation`, `curve`, and `lightAngle` alongside `refract
 ## Repository layout
 
 - `packages/glass-gl/` — the npm package: `glass-gl.js` (canonical engine), `package.json`, `README.md`.
-- `playground/` — interactive demo: `index.html`, `glass-gl.js` (symlink), `images/`. **Wired to a
-  Vercel deployment — don't restructure this directory.**
+- `playground/` — interactive demos: `index.html` (parameter playground), `os.html` (glassOS — a
+  responsive glass desktop: menu bar, dock, app windows as info pages), `glass-gl.js` (symlink),
+  `images/`. **Wired to a Vercel deployment — don't restructure this directory.**
 - `skills/glass-gl/SKILL.md` — the distributable agent skill (installable via `npx skills add
   wiiiimm/glass-gl`). **Canonical agent-facing usage doc** — when the library's API/usage changes,
   update `SKILL.md` (don't re-document it in a new place). It references the engine by npm/CDN, never
