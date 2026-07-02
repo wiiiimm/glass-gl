@@ -48,6 +48,11 @@ glass.setBackground(videoEl);        // <video> or <canvas> = LIVE, refracted ev
 glass.destroy();
 ```
 
+`createGlass` options: **`dpr`** (retina-sharp by default, clamped to 2× — pass a number to
+cap it or `false` for 1:1) and **`transparent: true`** (draw *only* the lenses, transparent
+elsewhere — for glass over the page's **own** live canvas, e.g. a three.js scene, so the
+page stays crisp). Since 0.3.0, `edgeFrost: 0` means **no** rim band.
+
 ## The one rule
 
 Liquid glass needs **something to bend**. The effect refracts a *background layer you give

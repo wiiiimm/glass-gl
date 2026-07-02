@@ -44,11 +44,14 @@ The repo ships:
 **symlink** to it (git mode `120000`). **Edit the package file**; never replace the symlink with a
 copy. npm still ships the real file; the demo follows the symlink, so they can't diverge.
 
-Public API: `createGlass({ canvas, background })` → `register(el, { radius })` / `unregister` /
-`clear` / `setParams({...})` / `setBackground(src)` / `destroy()`. `setBackground` takes a URL
-string, `<img>`, `<canvas>`, or `<video>` (canvas/video = live, refreshed each frame). Params
-include `dispersion`, `saturation`, `curve`, and `lightAngle` alongside `refraction`/`blur`/
-`edgeFrost`/etc. — `skills/glass-gl/SKILL.md` has the full table.
+Public API: `createGlass({ canvas, background, dpr, transparent })` → `register(el, { radius })` /
+`unregister` / `clear` / `setParams({...})` / `setBackground(src)` / `destroy()`. `setBackground`
+takes a URL string, `<img>`, `<canvas>`, or `<video>` (canvas/video = live, refreshed each frame).
+Options: `dpr` = retina-sharp buffers by default (≤2×; number to cap, `false` for 1:1);
+`transparent: true` = draw only the lenses (premultiplied alpha) for glass over the page's own
+live canvas (demo: `playground/index.html?transparent`). Params include `dispersion`,
+`saturation`, `curve`, and `lightAngle` alongside `refraction`/`blur`/`edgeFrost`/etc.
+(`edgeFrost: 0` = no rim since 0.3.0) — `skills/glass-gl/SKILL.md` has the full table.
 
 ## Repository layout
 

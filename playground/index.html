@@ -397,7 +397,20 @@
   renderStage(performance.now());
   (function stageLoop(){ renderStage(performance.now()); requestAnimationFrame(stageLoop); })();
 
-  const glass = createGlass({ canvas: canvasEl, background: stage });
+  /* ?transparent — demo of transparent mode: the page displays the stage canvas
+     ITSELF (crisp, no GL re-sampling) and the engine draws ONLY the lenses on
+     top with premultiplied alpha. This is the mode for refracting a page's own
+     live canvas (e.g. a three.js scene). Default mode: the engine paints the
+     background across the whole GL canvas. */
+  const TRANSPARENT = new URLSearchParams(location.search).has("transparent");
+  if (TRANSPARENT) {
+    // no z-index:-1 — body has its own background (html sets one too, so it
+    // doesn't propagate to the root canvas) and would paint OVER a negative-z
+    // child. DOM order does the layering: stage before #gl = behind the glass.
+    stage.style.cssText = "position:fixed;inset:0;width:100%;height:100%;display:block;";
+    document.body.prepend(stage);
+  }
+  const glass = createGlass({ canvas: canvasEl, background: stage, transparent: TRANSPARENT });
 
   function updateDock() {
     const active = fading ? nextIdx : curIdx;

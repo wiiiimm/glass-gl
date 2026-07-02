@@ -28,7 +28,7 @@ glass.setParams({
   blur: 1.2,                 // frost
   liquidness: 0.0,           // milky mix toward tint
   edgeLight: 1.0,            // directional rim glint strength
-  edgeFrost: 0.22,           // frosted rim band
+  edgeFrost: 0.22,           // frosted rim band (0 = none)
   dispersion: 0.2,           // chromatic aberration at the rim
   saturation: 1.25,          // vibrancy of the refracted backdrop
   curve: 2.8,                // lens profile: 1 linear → ~3 droplet
@@ -41,6 +41,26 @@ glass.unregister(el);
 glass.setBackground("/other.jpg");   // string / <img> = static; <canvas> / <video> = live
 glass.destroy();
 ```
+
+### Options (`createGlass({ … })`)
+
+- **`dpr`** — retina-sharp by default: the canvas renders at `devicePixelRatio`
+  (clamped to 2). Pass a number for a custom cap, or `false`/`0` for legacy 1:1.
+- **`transparent: true`** — draw **only** the glass surfaces and leave every other
+  pixel transparent (premultiplied alpha). Use it when the background you refract
+  **is the page's own live canvas** (a three.js scene, a game, a visualisation):
+  the page's pixels stay crisp and the engine composites just the lenses on top.
+  Default (opaque) mode paints the background across the whole canvas — right for
+  glass over a media backdrop you hand to the engine.
+
+```js
+// glass over YOUR live canvas (e.g. three.js) — no background re-display:
+const glass = createGlass({ canvas: glassCanvas, background: sceneCanvas, transparent: true });
+```
+
+> **Behaviour change in 0.3.0:** `edgeFrost: 0` now means *no* rim band. Earlier
+> versions kept a faint hard-coded rim even at 0 — scenes relying on it should set
+> `edgeFrost: ~0.17`.
 
 ## When to use it (and when not to)
 

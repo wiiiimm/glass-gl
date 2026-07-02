@@ -14,12 +14,23 @@
  *   glass.setParams({ refraction: 0.22, blur: 1.2, ... });
  *   glass.unregister(el);  glass.destroy();
  *
+ * Options: { dpr } — render at devicePixelRatio (clamped ≤2) so lenses stay
+ * sharp on retina; on by default, pass a number for a custom cap or false for
+ * legacy 1:1. { transparent: true } — draw ONLY the glass surfaces and leave
+ * every other pixel transparent (premultiplied alpha), for when the background
+ * you refract IS the page's own live canvas (e.g. a WebGL scene): the page
+ * stays crisp and the engine composites just the lenses on top. Default mode
+ * paints the background across the whole canvas (glass over a media backdrop).
+ *
  * The effect needs a background to bend — that's the one rule of this technique.
  */
 
 const MAX = 16; // max simultaneous glass surfaces (shader array size)
 
-const FRAG = `
+// The fragment shader is compiled per-instance: transparent mode drops the
+// fullscreen background fetch and outputs premultiplied alpha instead of
+// repainting the backdrop, so the host page's own pixels show through crisp.
+const FRAG = (transparent) => `
   precision highp float;
   const int MAX = ${MAX};
   uniform vec3  iResolution;
@@ -54,7 +65,7 @@ const FRAG = `
   void main() {
     vec2 frag = gl_FragCoord.xy;
     vec2 uv = frag / iResolution.xy;
-    vec4 bg = texture2D(iChannel0, coverUv(uv));
+    ${transparent ? "" : "vec4 bg = texture2D(iChannel0, coverUv(uv));"}
 
     float best = 1e9; vec2 bPos = vec2(0.0); vec2 bHalf = vec2(1.0); float bRad = 0.0;
     for (int i = 0; i < MAX; i++) {
@@ -71,7 +82,7 @@ const FRAG = `
     float fw = mix(2.0, 20.0, uFrost);
     float rim = clamp(1.0 - abs(best + fw) / fw, 0.0, 1.0);
 
-    vec4 color = bg;
+    vec4 color = ${transparent ? "vec4(0.0)" : "vec4(bg.rgb, 1.0)"};
     if (bodyMask > 0.0) {
       vec2 cuv = bPos / iResolution.xy;
 
@@ -120,12 +131,15 @@ const FRAG = `
       float shade = pow(max(dot(nrm, -uLightDir), 0.0), 2.0) * band;
       float sheen = max(dot(normalize(uv - cuv + vec2(1e-5)), uLightDir), 0.0) * 0.06;
 
+      // rim scales fully with uFrost (no hard-coded floor): edgeFrost 0 = NO rim band
       vec4 lighting = clamp(acc + vec4((glint * 0.55 - shade * 0.22 + sheen) * uEdge)
-                                + vec4(rim) * (0.12 + uFrost * 0.6), 0.0, 1.0);
+                                + vec4(rim) * (uFrost * 0.72), 0.0, 1.0);
       lighting = mix(lighting, vec4(uTint, 1.0), uWhite);
-      color = mix(bg, lighting, bodyMask);
+      color = ${transparent
+        ? "vec4(lighting.rgb * bodyMask, bodyMask)"                 /* premultiplied */
+        : "vec4(mix(bg, lighting, bodyMask).rgb, 1.0)"};
     }
-    gl_FragColor = vec4(color.rgb, 1.0);
+    gl_FragColor = color;
   }
 `;
 
@@ -145,12 +159,21 @@ const DEFAULT_PARAMS = {
   tint: [1, 1, 1],  // milk colour (white = light glass)
 };
 
-export function createGlass({ canvas, background, params } = {}) {
+export function createGlass({ canvas, background, params, dpr, transparent = false } = {}) {
   if (!canvas) throw new Error("createGlass: { canvas } is required");
-  const gl = canvas.getContext("webgl", { preserveDrawingBuffer: true });
+  // alpha + premultipliedAlpha are the WebGL defaults, but transparent mode
+  // depends on them for compositing with the page — state them explicitly.
+  const gl = canvas.getContext("webgl", { preserveDrawingBuffer: true, alpha: true, premultipliedAlpha: true });
   if (!gl) throw new Error("createGlass: WebGL not available");
 
   const P = { ...DEFAULT_PARAMS, ...(params || {}) };
+
+  // DPR-aware rendering: buffer at devicePixelRatio (clamped, default ≤2) so
+  // the lens isn't soft on retina. { dpr: false | 0 } = legacy 1:1;
+  // { dpr: n } = clamp to n. Re-read live — it changes across monitors.
+  const DPR = () => (dpr === false || dpr === 0)
+    ? 1
+    : Math.min(window.devicePixelRatio || 1, typeof dpr === "number" ? dpr : 2);
   const surfaces = new Map();          // registered element -> opts ({ radius? })
   let imgW = 1600, imgH = 1000;
   let liveSource = null;               // canvas/video → re-uploaded every frame
@@ -165,7 +188,7 @@ export function createGlass({ canvas, background, params } = {}) {
   };
   const prog = gl.createProgram();
   gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
-  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG(!!transparent)));
   gl.linkProgram(prog); gl.useProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) console.error(gl.getProgramInfoLog(prog));
 
@@ -234,9 +257,9 @@ export function createGlass({ canvas, background, params } = {}) {
 
   /* ---- sizing (matches buffer to display; fixes iOS 100vh ≠ innerHeight) ---- */
   function resize() {
-    const w = window.innerWidth, h = window.innerHeight;
-    canvas.width = w; canvas.height = h;
-    canvas.style.width = w + "px"; canvas.style.height = h + "px";
+    const w = window.innerWidth, h = window.innerHeight, d = DPR();
+    canvas.width = Math.round(w * d); canvas.height = Math.round(h * d);   // buffer px
+    canvas.style.width = w + "px"; canvas.style.height = h + "px";         // CSS px
   }
   resize();
   window.addEventListener("resize", resize);
@@ -261,14 +284,16 @@ export function createGlass({ canvas, background, params } = {}) {
     }
 
     let n = 0;
+    const d = DPR();                     // rects are CSS px → scale to buffer px
     surfaces.forEach((opts, el) => {
       if (n >= MAX) return;
       const r = el.getBoundingClientRect();
-      posArr[n*2]   = r.left + r.width / 2;
-      posArr[n*2+1] = canvas.height - (r.top + r.height / 2);  // flip y
-      halfArr[n*2]   = r.width / 2 + 2;
-      halfArr[n*2+1] = r.height / 2 + 2;
-      radArr[n]      = (opts && opts.radius != null) ? opts.radius : P.radius;
+      if (!r.width || !r.height) return; // hidden (display:none) — no stray lens at origin
+      posArr[n*2]   = (r.left + r.width / 2) * d;
+      posArr[n*2+1] = canvas.height - (r.top + r.height / 2) * d;  // flip y
+      halfArr[n*2]   = (r.width / 2) * d + 2;                      // +2 slack in buffer px
+      halfArr[n*2+1] = (r.height / 2) * d + 2;
+      radArr[n]      = ((opts && opts.radius != null) ? opts.radius : P.radius) * d;
       n++;
     });
 
@@ -278,7 +303,7 @@ export function createGlass({ canvas, background, params } = {}) {
     gl.uniform2fv(U.uPos, posArr);
     gl.uniform2fv(U.uHalf, halfArr);
     gl.uniform1i(U.uCount, n);
-    gl.uniform1f(U.uBlur, Math.max(0.001, P.blur));
+    gl.uniform1f(U.uBlur, Math.max(0.001, P.blur) * d);   // blur in buffer px → resolution-independent frost
     gl.uniform1f(U.uLens, P.refraction);
     gl.uniform1f(U.uWhite, P.liquidness);
     gl.uniform1f(U.uEdge, P.edgeLight);

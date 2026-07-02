@@ -80,7 +80,14 @@ background behind it.
 
 ## API
 
-`createGlass({ canvas, background, params }) → instance`
+`createGlass({ canvas, background, params, dpr, transparent }) → instance`
+
+### Options
+
+| Option | Default | Meaning |
+|---|---|---|
+| `dpr` | on (≤2) | Retina sharpness: render at `devicePixelRatio`, clamped to 2. Pass a number for a custom cap, `false`/`0` for legacy 1:1. |
+| `transparent` | `false` | Draw **only** the glass surfaces; every other pixel stays transparent (premultiplied alpha). Use when the background you refract **is the page's own live canvas** (see recipe below). Default mode paints the background across the whole canvas. |
 
 | Method | What it does |
 |---|---|
@@ -100,7 +107,7 @@ background behind it.
 | `blur` | px | Frost (sample spread). |
 | `liquidness` | 0–~0.6 | Milky mix toward `tint`. |
 | `edgeLight` | ~0–2 | Strength of the **directional rim glint** (bright arc facing the light, soft shade opposite). |
-| `edgeFrost` | 0–1 | Rim band (a frosted border). |
+| `edgeFrost` | 0–1 | Rim band (a frosted border). `0` = none (since 0.3.0 — older versions kept a faint rim even at 0). |
 | `dispersion` | 0–1 | **Chromatic aberration** — splits R/B at the rim so white edges fringe into colour like real glass. Off by default. |
 | `saturation` | ~0.8–1.7 | **Vibrancy** — saturates the refracted backdrop (Apple-material style). `1` = neutral, ~`1.2–1.35` = luminous. |
 | `curve` | 1–4 | **Lens profile** — `1` = linear bend; `~2.5–3.5` = droplet (optically flat centre, steep bend only at the rim — the "liquid" look). |
@@ -132,6 +139,31 @@ function draw() {
 draw();
 glass.setBackground(stage);
 ```
+
+## Glass over the page's OWN canvas (transparent mode)
+
+When the page already renders its background itself — a three.js scene, a game, a map,
+any live `<canvas>` — don't let the engine repaint it (the fullscreen copy re-samples
+and softens the whole page). Pass that canvas as the background **and** set
+`transparent: true`: the page's canvas stays visible and crisp, and the engine draws
+only the lenses on top.
+
+```html
+<canvas id="scene"></canvas>                                  <!-- your renderer -->
+<canvas id="glass" style="position:fixed; inset:0; pointer-events:none"></canvas>
+```
+
+```js
+const glass = createGlass({
+  canvas: document.getElementById("glass"),
+  background: document.getElementById("scene"),   // live: re-uploaded every frame
+  transparent: true,                              // draw ONLY the glass
+});
+glass.register(panel, { radius: 20 });
+```
+
+Stack the glass canvas **above** the scene canvas and below your DOM content. This is
+the recommended setup for HUD/panel glass over WebGL scenes.
 
 ## Gotchas
 
